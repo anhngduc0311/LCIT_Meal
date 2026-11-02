@@ -64,7 +64,7 @@ function MonthlyBoard() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isMockMode } = useAuth();
-  const { today, now } = useCancellationDeadline();
+  const { today } = useCancellationDeadline();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [facility, setFacility] = useState<FacilityFilter>(1);
   const [search, setSearch] = useState('');
@@ -113,7 +113,6 @@ function MonthlyBoard() {
   const table = buildMonthlyMeals(month, registrations.data || [], meals.data || [], people.map(p => p.id), pricesReady ? price : 0, pricesReady ? guestPrice : 0);
   const loading = registrations.isLoading || meals.isLoading || users.isLoading || facilities.isLoading;
   const error = registrations.error || meals.error || users.error;
-  const completionTime = settingValue('meal_completion_time') || '12:00';
 
   // Statistics for quick chips
   const peopleWithMealsCount = people.filter(p => (table.people.get(p.id)?.staff || 0) > 0).length;
@@ -205,8 +204,7 @@ function MonthlyBoard() {
     const closed = !meal || Boolean(meal.isCancelled) || meal.status !== 'active';
     const eating = !closed && countsAsMeal(record);
     const pending = !closed && record?.status === 'pending';
-    const completed = record?.status === 'completed' || date < today || now >= Date.parse(`${date}T${completionTime}:00+07:00`);
-    const editable = !closed && !completed && !saving;
+    const editable = !closed && !saving;
 
     return (
       <TouchableOpacity
@@ -829,8 +827,7 @@ function MonthlyBoard() {
                         const closed = !meal || Boolean(meal.isCancelled) || meal.status !== 'active';
                         const eating = !closed && countsAsMeal(record);
                         const pending = !closed && record?.status === 'pending';
-                        const completed = record?.status === 'completed' || date < today || now >= Date.parse(`${date}T${completionTime}:00+07:00`);
-                        const editable = !closed && !completed && !saving;
+                        const editable = !closed && !saving;
                         const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
 
                         return (
@@ -984,8 +981,7 @@ function MonthlyBoard() {
               const closed = !meal || Boolean(meal.isCancelled) || meal.status !== 'active';
               const eating = !closed && countsAsMeal(record);
               const pending = !closed && record?.status === 'pending';
-              const completed = record?.status === 'completed' || selectedDate < today || now >= Date.parse(`${selectedDate}T${completionTime}:00+07:00`);
-              const editable = !closed && !completed && !saving;
+              const editable = !closed && !saving;
 
               return (
                 <View key={person.id} style={styles.dayStaffRow}>
@@ -1061,6 +1057,7 @@ function MonthlyBoard() {
         </View>
 
         <Text style={styles.footnote}>
+          Admin/quản lý có thể cắt và đăng ký lại không giới hạn thời gian.{'\n'}
           Đơn giá: {pricesReady ? `${formatCurrency(price)}/cán bộ · ${formatCurrency(guestPrice)}/khách` : 'Đang tải đơn giá...'}
         </Text>
       </View>

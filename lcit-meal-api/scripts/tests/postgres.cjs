@@ -64,6 +64,17 @@ async function main() {
   await req('admin', `/holiday-events/${holiday.id}/restore`, 'PATCH', {});
   assert.equal((await req('employee', `/meal-registrations/${reg.id}`)).status, 'confirmed');
   await req('manager', `/meal-registrations/${reg.id}/cancel`, 'PATCH', {});
+  // Management can repeatedly correct historical/completed meals through HTTP.
+  const [oldMeal] = await pool.query("INSERT INTO meal(meal_date,status) VALUES(?,'active')", ['2001-01-02']);
+  for (const role of ['admin', 'manager']) {
+    for (let round = 0; round < 2; round++) {
+      const restored = await req(role, '/meal-registrations', 'POST', { userId: users.employee, mealId: oldMeal.insertId, guestCount: 1 }, 201);
+      assert.equal(restored.status, 'completed');
+      const cut = await req(role, `/meal-registrations/${restored.id}/cancel`, 'PATCH', {});
+      assert.equal(cut.status, 'cancelled');
+    }
+  }
+  await req('employee', '/meal-registrations', 'POST', { mealId: oldMeal.insertId }, 409);
   const payment = await req('manager', '/payments', 'POST', { userId: users.employee, paymentDate: date, amount: 90000 }, 201);
   assert.equal(payment.paymentDate, date);
   await req('manager', `/payments/${payment.id}/mark-paid`, 'PATCH', { paidAmount: 90000 });

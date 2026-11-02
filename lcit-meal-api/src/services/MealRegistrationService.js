@@ -50,6 +50,9 @@ class MealRegistrationService {
       [ROLE.ADMIN, ROLE.MANAGER].includes(role),
     );
 
+    // Quản lý được điều chỉnh bảng ăn bất kỳ lúc nào, kể cả sau giờ ăn.
+    if (isManagement) return { canCancel: true, requiresApproval: false, reason: null };
+
     // 1. Kiểm tra nếu suất ăn đã hoàn thành (COMPLETED status)
     if (registration.status === MEAL_REGISTRATION_STATUS.COMPLETED) {
       return {
@@ -69,7 +72,7 @@ class MealRegistrationService {
     }
 
     // 3. Nếu là ngày trong quá khứ (không phải hôm nay)
-    if (meal.mealDate < today) {
+    if (meal.mealDate < today && !isManagement) {
       return {
         canCancel: false,
         reason: "Không thể cắt suất ăn của ngày đã qua",
@@ -224,11 +227,11 @@ class MealRegistrationService {
     // Không cho đăng ký suất ăn của ngày đã qua (dùng chuỗi so sánh vì
     // meal_date lưu dạng DATE "YYYY-MM-DD", so sánh string là an toàn).
     const todayStr = getVietnamNow().date;
-    if (meal.mealDate < todayStr) {
+    const isManagement = (actor.roles || []).some(role => [ROLE.ADMIN, ROLE.MANAGER].includes(role));
+    if (meal.mealDate < todayStr && !isManagement) {
       throw new AppError("Không thể đăng ký suất ăn cho ngày đã qua", 409);
     }
-    const isManagement = (actor.roles || []).some(role => [ROLE.ADMIN, ROLE.MANAGER].includes(role));
-    if (meal.completionStatus === MEAL_COMPLETION_STATUS.COMPLETED) {
+    if (meal.completionStatus === MEAL_COMPLETION_STATUS.COMPLETED && !isManagement) {
       throw new AppError("Bữa ăn đã hoàn thành, không thể đăng ký thêm", 409);
     }
     if (!isManagement) await this.assertBeforeRegistrationCutoff(meal.mealDate);
@@ -237,7 +240,7 @@ class MealRegistrationService {
       targetUserId,
       data.mealId,
     );
-    if (existing?.status === MEAL_REGISTRATION_STATUS.COMPLETED) {
+    if (existing?.status === MEAL_REGISTRATION_STATUS.COMPLETED && !isManagement) {
       throw new AppError("Suất ăn đã hoàn thành, không thể thay đổi", 409);
     }
 
@@ -265,7 +268,10 @@ class MealRegistrationService {
     // NGHIỆP VỤ MỚI: đăng ký thêm suất cho khách KHÔNG cần quản lý duyệt -
     // mọi đăng ký (có khách hay không) đều được xác nhận ngay. Quản lý chỉ
     // được thông báo khi có khách để biết mà chuẩn bị thêm suất ăn.
-    const newStatus = MEAL_REGISTRATION_STATUS.CONFIRMED;
+    // Điều chỉnh bữa đã diễn ra phải cập nhật cả số suất thực tế.
+    const newStatus = isManagement && (meal.mealDate < todayStr || meal.completionStatus === MEAL_COMPLETION_STATUS.COMPLETED)
+      ? MEAL_REGISTRATION_STATUS.COMPLETED
+      : MEAL_REGISTRATION_STATUS.CONFIRMED;
     const hasGuest = guestCount > 0;
 
     const registration = existing

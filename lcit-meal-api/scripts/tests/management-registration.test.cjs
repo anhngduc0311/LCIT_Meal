@@ -26,10 +26,33 @@ test('Management can register on behalf after employee cutoff; employee cannot',
   assert.equal(writes.length, 0);
 });
 
-test('Even management cannot change completed meal or registration', async () => {
+test('Management can register completed meals; employee still cannot', async () => {
+  for (const role of ['admin', 'manager']) {
+    const { service, writes } = setup('completed');
+    const result = await service.create({ userId: 2, mealId: 1 }, { actorId: 1, roles: [role] });
+    assert.equal(result.status, 'completed');
+    assert.equal(writes.length, 1);
+  }
   for (const [completion, existing] of [['completed', null], ['pending', { id: 2, status: 'completed' }]]) {
     const { service, writes } = setup(completion, existing);
-    await assert.rejects(service.create({ userId: 2, mealId: 1 }, { actorId: 1, roles: ['admin'] }), /hoàn thành/);
+    service.assertBeforeRegistrationCutoff = async () => {};
+    await assert.rejects(service.create({ mealId: 1 }, { actorId: 2, roles: ['employee'] }), /hoàn thành/);
     assert.equal(writes.length, 0);
+  }
+});
+
+test('Management can cancel completed or past meals without approval', async () => {
+  const { service } = setup();
+  for (const role of ['admin', 'manager']) {
+    const permission = await service.checkCancellationPermission({ status: 'completed' }, { mealDate: '2001-01-02', completionStatus: 'completed' }, { roles: [role] });
+    assert.deepEqual(permission, { canCancel: true, requiresApproval: false, reason: null });
+  }
+  assert.equal((await service.checkCancellationPermission({ status: 'completed' }, { mealDate: '2001-01-02', completionStatus: 'completed' }, { roles: ['employee'] })).canCancel, false);
+});
+
+test('Controller actor supports string and object role forms', () => {
+  const { getActor } = require('../../src/ultis/actor');
+  for (const user of [{ id: 1, roles: ['admin'] }, { id: 1, roles: [{ code: 'manager' }] }, { id: 1, role: 'admin' }]) {
+    assert.ok(getActor({ user, headers: {} }).roles.some(r => ['admin', 'manager'].includes(r)));
   }
 });

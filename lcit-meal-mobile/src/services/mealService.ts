@@ -282,15 +282,11 @@ export const mealService = {
   /**
    * Cắt suất trực tiếp: PATCH /api/meal-registrations/:id/cancel
    */
-  // Management cancellation uses the server's permission checks, including the
-  // completed-meal lock. The personal 08:00 cutoff does not apply to managers.
+  // Management adjustments rely on server role checks and have no time limit.
   async cancelRegistrationOnBehalf(registrationId: number, useMock = false): Promise<MealRegistration> {
     if (useMock) {
       const record = mockStore.getAllRegistrations().find(item => item.id === registrationId);
       if (!record) throw new Error('Không tìm thấy suất ăn.');
-      if (record.status === 'completed' || (record.mealDate || '') < vietnamToday()) {
-        throw new Error('Suất ăn đã hoàn thành hoặc thuộc ngày đã qua, không thể cắt.');
-      }
       if (record.status === 'cancelled') throw new Error('Suất ăn đã được cắt.');
       return mockStore.cancelMealRegistration(registrationId)!;
     }

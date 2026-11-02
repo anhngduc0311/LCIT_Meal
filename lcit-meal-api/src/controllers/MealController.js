@@ -1,11 +1,5 @@
 const ApiResponse = require("../ultis/ApiResponse");
-
-const getActor = (req) => ({
-  actorId: req.user ? req.user.id : null,
-  roles: req.user ? (req.user.roles || []).map((role) => role.code) : [],
-  ipAddress: req.ip,
-  userAgent: req.headers["user-agent"],
-});
+const { getActor } = require("../ultis/actor");
 
 class MealController {
   constructor(mealService) {

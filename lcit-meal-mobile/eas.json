@@ -14,7 +14,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://com365.lcit.vn:4002/api",
+        "EXPO_PUBLIC_API_URL": "https://appmeal.34.126.188.117.sslip.io/api",
         "EXPO_PUBLIC_USE_MOCK": "false"
       }
     },
@@ -23,7 +23,7 @@
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://com365.lcit.vn:4002/api",
+        "EXPO_PUBLIC_API_URL": "https://appmeal.34.126.188.117.sslip.io/api",
         "EXPO_PUBLIC_USE_MOCK": "false"
       }
     }
