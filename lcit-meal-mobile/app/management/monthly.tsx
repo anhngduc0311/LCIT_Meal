@@ -7,6 +7,7 @@ import {
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -31,7 +32,7 @@ import { useManagementPayments, useMarkPaid } from '../../src/hooks/useManagemen
 import { useSystemSettings } from '../../src/hooks/useManagementSettings';
 import { useFacilities } from '../../src/hooks/useFacilities';
 import { useCancellationDeadline } from '../../src/hooks/useCancellationDeadline';
-import { FacilityFilter, facilityLabel, getFacility, matchesFacility } from '../../src/utils/facilities';
+import { FacilityFilter, getFacility, matchesFacility } from '../../src/utils/facilities';
 import { buildMonthlyMeals, countsAsMeal, monthRange, monthlyPaymentState, shiftMonth } from '../../src/utils/monthlyMeals';
 import { formatDisplayDate, formatCurrency } from '../../src/utils/formatters';
 import { extractUserRole } from '../../src/types/auth';
@@ -40,14 +41,16 @@ import { mealService } from '../../src/services/mealService';
 import { colors } from '../../src/theme/colors';
 import { radius } from '../../src/theme/radius';
 
-const STANDARD_COL_WIDTH = 74;
-const COMPACT_COL_WIDTH = 62;
-const DATE_WIDTH = 96;
-const HEIGHT = 44;
 const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 
-type ViewMode = 'grid' | 'staff' | 'day';
+type ViewMode = 'day' | 'staff';
 type PersonFilterType = 'all' | 'has_meals' | 'unpaid' | 'paid';
+
+// Small screens use one vertical page scroll; the roster must keep its natural
+// height instead of competing with the filters and footer for leftover space.
+function MonthlyList({ flow, children }: React.PropsWithChildren<{ flow: boolean }>) {
+  return flow ? <View>{children}</View> : <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>{children}</ScrollView>;
+}
 
 export default function MonthlyMealsScreen() {
   const { role } = useAuth();
@@ -61,6 +64,9 @@ export default function MonthlyMealsScreen() {
 }
 
 function MonthlyBoard() {
+  const { width, height, fontScale } = useWindowDimensions();
+  const narrow = width < 600;
+  const flow = narrow || height < 720 || fontScale > 1.3;
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isMockMode } = useAuth();
@@ -68,10 +74,8 @@ function MonthlyBoard() {
   const [month, setMonth] = useState(today.slice(0, 7));
   const [facility, setFacility] = useState<FacilityFilter>(1);
   const [search, setSearch] = useState('');
-  const [viewMode, setViewMode] = useState<ViewMode>('grid');
+  const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [personFilter, setPersonFilter] = useState<PersonFilterType>('all');
-  const [compactSummary, setCompactSummary] = useState(true);
-  const [columnWidthMode, setColumnWidthMode] = useState<'standard' | 'compact'>('standard');
   const [expandedStaffIds, setExpandedStaffIds] = useState<Set<number>>(new Set());
   const [selectedDate, setSelectedDate] = useState<string>(today.slice(0, 7) === month ? today : `${month}-01`);
   const [daySubFilter, setDaySubFilter] = useState<'all' | 'eating' | 'not_eating'>('all');
@@ -84,8 +88,6 @@ function MonthlyBoard() {
   const busy = useRef(false);
   const [paymentPerson, setPaymentPerson] = useState<User | null>(null);
   const [invoice, setInvoice] = useState<Payment | null>(null);
-  const headerScroll = useRef<ScrollView>(null);
-  const bodyScroll = useRef<ScrollView>(null);
 
   const range = useMemo(() => monthRange(month), [month]);
   const registrations = useManagementRegistrations({ from: range.from, to: range.to });
@@ -143,7 +145,6 @@ function MonthlyBoard() {
     return true;
   });
 
-  const colWidth = columnWidthMode === 'compact' ? COMPACT_COL_WIDTH : STANDARD_COL_WIDTH;
 
   const refresh = async () => {
     await Promise.all([registrations.refetch(), meals.refetch(), users.refetch(), payments.refetch(), settings.refetch()]);
@@ -153,8 +154,6 @@ function MonthlyBoard() {
     setMonth(next);
     setNotice(null);
     setSelectedDate(today.slice(0, 7) === next ? today : `${next}-01`);
-    bodyScroll.current?.scrollTo({ x: 0, animated: false });
-    headerScroll.current?.scrollTo({ x: 0, animated: false });
   };
 
   const toggleExpandStaff = (id: number) => {
@@ -199,49 +198,6 @@ function MonthlyBoard() {
     }
   };
 
-  const cell = (person: User, date: string) => {
-    const record = table.cells.get(`${date}:${person.id}`);
-    const meal = table.mealsByDate.get(date);
-    const closed = !meal || Boolean(meal.isCancelled) || meal.status !== 'active';
-    const eating = !closed && countsAsMeal(record);
-    const pending = !closed && record?.status === 'pending';
-    const editable = !closed && !saving;
-
-    return (
-      <TouchableOpacity
-        key={person.id}
-        accessibilityRole="checkbox"
-        accessibilityLabel={`${person.fullName}, ${formatDisplayDate(date)}${closed ? ', chưa phục vụ' : ''}`}
-        accessibilityState={{ checked: eating, disabled: !editable }}
-        disabled={!editable}
-        onPress={() => setAction({ person, date, record, eating: eating || pending })}
-        style={[
-          styles.cell,
-          { width: colWidth },
-          styles.mealCell,
-          closed && styles.closed,
-          eating && styles.eating,
-          pending && styles.pending,
-        ]}
-      >
-        {closed ? (
-          <Text style={styles.dash}>—</Text>
-        ) : pending ? (
-          <Ionicons name="time" size={17} color="#AD6800" />
-        ) : (
-          <Ionicons
-            name={eating ? 'checkmark-circle' : record?.status === 'cancelled' ? 'close-circle' : 'ellipse-outline'}
-            size={eating || record?.status === 'cancelled' ? 19 : 15}
-            color={eating ? '#16834D' : record?.status === 'cancelled' ? '#DC2626' : '#C3D0CA'}
-          />
-        )}
-        {eating && Number(record?.guestCount) > 0 && (
-          <Text style={styles.guestBadge}>+{record?.guestCount}</Text>
-        )}
-      </TouchableOpacity>
-    );
-  };
-
   const invoiceState = paymentPerson ? monthlyPaymentState(payments.data || [], paymentPerson.id, month) : null;
 
   // Day View helpers
@@ -257,10 +213,11 @@ function MonthlyBoard() {
   });
 
   return (
-    <ScreenContainer scrollable={false}>
+    <ScreenContainer scrollable={flow} contentContainerStyle={flow ? styles.flowContent : undefined}>
       <Header
         title="Bảng suất ăn tháng"
-        subtitle="Theo dõi ăn và thanh toán theo từng cán bộ"
+        subtitle={narrow ? undefined : 'Theo dõi ăn và thanh toán theo từng cán bộ'}
+        style={flow ? styles.flowHeader : undefined}
         showBack
         onBack={() => router.back()}
         rightAction={
@@ -277,11 +234,11 @@ function MonthlyBoard() {
 
       {/* Controls: Month Nav + Facility */}
       <View style={styles.controlsRow}>
-        <View style={styles.monthNav}>
+        <View style={[styles.monthNav, narrow && styles.narrowMonthNav]}>
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Tháng trước"
-            style={styles.monthNavArrow}
+            style={[styles.monthNavArrow, narrow && styles.narrowMonthArrow]}
             onPress={() => changeMonth(shiftMonth(month, -1))}
           >
             <Ionicons name="chevron-back" size={18} color={colors.primary} />
@@ -290,17 +247,17 @@ function MonthlyBoard() {
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Chọn tháng theo dõi"
-            style={styles.monthButton}
+            style={[styles.monthButton, narrow && styles.narrowMonthButton]}
             onPress={() => { setDraftMonth(month); setMonthOpen(true); }}
           >
             <Ionicons name="calendar-outline" size={16} color={colors.primary} />
-            <Text style={styles.monthText}>Tháng {month.slice(5)}/{month.slice(0, 4)}</Text>
+            <Text style={[styles.monthText, narrow && styles.narrowMonthText]}>{narrow ? `${month.slice(5)}/${month.slice(0, 4)}` : `Tháng ${month.slice(5)}/${month.slice(0, 4)}`}</Text>
           </TouchableOpacity>
 
           <TouchableOpacity
             accessibilityRole="button"
             accessibilityLabel="Tháng sau"
-            style={styles.monthNavArrow}
+            style={[styles.monthNavArrow, narrow && styles.narrowMonthArrow]}
             onPress={() => changeMonth(shiftMonth(month, 1))}
           >
             <Ionicons name="chevron-forward" size={18} color={colors.primary} />
@@ -310,7 +267,7 @@ function MonthlyBoard() {
         <FacilitySelector
           value={facility}
           onChange={setFacility}
-          style={styles.facilitySelector}
+          style={[styles.facilitySelector, narrow && styles.narrowFacility]}
         />
 
         {month !== today.slice(0, 7) && (
@@ -361,81 +318,19 @@ function MonthlyBoard() {
         </View>
       </View>
 
-      {/* View Mode Switcher: Lưới | Theo cán bộ | Theo ngày */}
-      <View style={styles.viewModeTabsContainer}>
-        <View style={styles.viewModeTabs}>
-          <TouchableOpacity
-            accessibilityRole="tab"
-            accessibilityState={{ selected: viewMode === 'grid' }}
-            style={[styles.viewModeTab, viewMode === 'grid' && styles.viewModeTabActive]}
-            onPress={() => setViewMode('grid')}
-          >
-            <Ionicons name="grid-outline" size={14} color={viewMode === 'grid' ? colors.primaryDark : colors.textMuted} />
-            <Text style={[styles.viewModeTabText, viewMode === 'grid' && styles.viewModeTabTextActive]}>
-              Bảng lưới
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            accessibilityRole="tab"
-            accessibilityState={{ selected: viewMode === 'staff' }}
-            style={[styles.viewModeTab, viewMode === 'staff' && styles.viewModeTabActive]}
-            onPress={() => setViewMode('staff')}
-          >
-            <Ionicons name="people-outline" size={14} color={viewMode === 'staff' ? colors.primaryDark : colors.textMuted} />
-            <Text style={[styles.viewModeTabText, viewMode === 'staff' && styles.viewModeTabTextActive]}>
-              Theo cán bộ
-            </Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            accessibilityRole="tab"
-            accessibilityState={{ selected: viewMode === 'day' }}
-            style={[styles.viewModeTab, viewMode === 'day' && styles.viewModeTabActive]}
-            onPress={() => setViewMode('day')}
-          >
+      <View style={[styles.viewModeTabsContainer, narrow && styles.narrowTabsContainer]}>
+        <View style={[styles.viewModeTabs, narrow && styles.narrowTabs]}>
+          <TouchableOpacity accessibilityRole="tab" accessibilityState={{ selected: viewMode === 'day' }}
+            style={[styles.viewModeTab, viewMode === 'day' && styles.viewModeTabActive]} onPress={() => setViewMode('day')}>
             <Ionicons name="calendar-outline" size={14} color={viewMode === 'day' ? colors.primaryDark : colors.textMuted} />
-            <Text style={[styles.viewModeTabText, viewMode === 'day' && styles.viewModeTabTextActive]}>
-              Theo ngày
-            </Text>
+            <Text style={[styles.viewModeTabText, viewMode === 'day' && styles.viewModeTabTextActive]}>Theo ngày</Text>
+          </TouchableOpacity>
+          <TouchableOpacity accessibilityRole="tab" accessibilityState={{ selected: viewMode === 'staff' }}
+            style={[styles.viewModeTab, viewMode === 'staff' && styles.viewModeTabActive]} onPress={() => setViewMode('staff')}>
+            <Ionicons name="people-outline" size={14} color={viewMode === 'staff' ? colors.primaryDark : colors.textMuted} />
+            <Text style={[styles.viewModeTabText, viewMode === 'staff' && styles.viewModeTabTextActive]}>Theo cán bộ</Text>
           </TouchableOpacity>
         </View>
-
-        {viewMode === 'grid' && (
-          <View style={styles.gridQuickActions}>
-            <TouchableOpacity
-              style={[styles.gridActionChip, !compactSummary && styles.gridActionChipActive]}
-              onPress={() => setCompactSummary(prev => !prev)}
-              accessibilityRole="button"
-              accessibilityLabel={compactSummary ? "Hiện tổng kết đầu cột" : "Thu gọn tổng kết đầu cột"}
-            >
-              <Ionicons
-                name={compactSummary ? "chevron-down-circle-outline" : "chevron-up-circle-outline"}
-                size={13}
-                color={!compactSummary ? colors.primaryDark : colors.textSecondary}
-              />
-              <Text style={[styles.gridActionText, !compactSummary && styles.gridActionTextActive]}>
-                {compactSummary ? 'Hiện tổng' : 'Gọn đầu'}
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.gridActionChip, columnWidthMode === 'compact' && styles.gridActionChipActive]}
-              onPress={() => setColumnWidthMode(prev => prev === 'standard' ? 'compact' : 'standard')}
-              accessibilityRole="button"
-              accessibilityLabel={`Độ rộng cột: ${columnWidthMode === 'standard' ? 'vừa' : 'nhỏ'}`}
-            >
-              <Ionicons
-                name="resize-outline"
-                size={13}
-                color={columnWidthMode === 'compact' ? colors.primaryDark : colors.textSecondary}
-              />
-              <Text style={[styles.gridActionText, columnWidthMode === 'compact' && styles.gridActionTextActive]}>
-                {columnWidthMode === 'standard' ? 'Cột vừa' : 'Cột gọn'}
-              </Text>
-            </TouchableOpacity>
-          </View>
-        )}
       </View>
 
       {/* Search & Filter Section */}
@@ -516,221 +411,9 @@ function MonthlyBoard() {
             </TouchableOpacity>
           ) : null}
         </View>
-      ) : viewMode === 'grid' ? (
-        /* ==================== VIEW 1: MATRIX GRID ==================== */
-        <ScrollView style={styles.table} stickyHeaderIndices={[0]} nestedScrollEnabled>
-          <View style={styles.tableHeader}>
-            <View style={styles.dateHeader}>
-              <View style={[styles.nameHeader, compactSummary ? styles.nameHeaderCompact : styles.nameHeaderFull]}>
-                <Text style={styles.headerText}>NGÀY ĂN</Text>
-                <Text style={styles.headerSmall}>Cuộn ngang →</Text>
-              </View>
-              {!compactSummary && (
-                <>
-                  <View style={styles.summaryLabel}>
-                    <Text style={styles.headerSmall}>Suất / người</Text>
-                  </View>
-                  <View style={styles.summaryLabel}>
-                    <Text style={styles.headerSmall}>Dự kiến (đ)</Text>
-                  </View>
-                  <View style={styles.summaryLabel}>
-                    <Text style={styles.headerSmall}>Thanh toán</Text>
-                  </View>
-                </>
-              )}
-            </View>
-
-            <ScrollView
-              horizontal
-              ref={headerScroll}
-              scrollEnabled={false}
-              showsHorizontalScrollIndicator={false}
-              style={styles.rightPane}
-            >
-              <View>
-                {/* Staff Name Columns */}
-                <View style={styles.row}>
-                  {visiblePeople.map(person => {
-                    const personStats = table.people.get(person.id);
-                    const paymentState = monthlyPaymentState(payments.data || [], person.id, month);
-                    return (
-                      <TouchableOpacity
-                        key={person.id}
-                        activeOpacity={0.8}
-                        onPress={() => setPaymentPerson(person)}
-                        style={[
-                          styles.nameHeader,
-                          styles.personHeader,
-                          { width: colWidth },
-                          compactSummary ? styles.nameHeaderCompact : styles.nameHeaderFull,
-                        ]}
-                      >
-                        <Text style={styles.personName} numberOfLines={compactSummary ? 1 : 2}>
-                          {person.fullName}
-                        </Text>
-                        {!compactSummary ? (
-                          <Text style={styles.username} numberOfLines={1}>
-                            @{person.username}
-                          </Text>
-                        ) : (
-                          <View style={styles.compactHeaderStats}>
-                            <Text style={styles.compactBadgeCount}>{personStats?.staff || 0}s</Text>
-                            <View
-                              style={[
-                                styles.paymentDot,
-                                { backgroundColor: paymentState.paid ? '#22C55E' : '#F59E0B' },
-                              ]}
-                            />
-                          </View>
-                        )}
-                      </TouchableOpacity>
-                    );
-                  })}
-                  <View
-                    style={[
-                      styles.nameHeader,
-                      styles.totalHeader,
-                      { width: colWidth },
-                      compactSummary ? styles.nameHeaderCompact : styles.nameHeaderFull,
-                    ]}
-                  >
-                    <Text style={styles.headerText}>KHÁCH</Text>
-                  </View>
-                  <View
-                    style={[
-                      styles.nameHeader,
-                      styles.totalHeader,
-                      { width: colWidth },
-                      compactSummary ? styles.nameHeaderCompact : styles.nameHeaderFull,
-                    ]}
-                  >
-                    <Text style={styles.headerText}>TỔNG</Text>
-                  </View>
-                </View>
-
-                {/* Optional Summary Rows */}
-                {!compactSummary && (
-                  <>
-                    <View style={styles.row}>
-                      {visiblePeople.map(person => (
-                        <View key={person.id} style={[styles.summaryCell, { width: colWidth }]}>
-                          <Text style={styles.summaryValue}>{table.people.get(person.id)?.staff || 0}</Text>
-                        </View>
-                      ))}
-                      <View style={[styles.summaryCell, { width: colWidth }]}>
-                        <Text style={styles.summaryValue}>
-                          {[...table.days.values()].reduce((n, d) => n + d.guests, 0)}
-                        </Text>
-                      </View>
-                      <View style={[styles.summaryCell, { width: colWidth }]}>
-                        <Text style={styles.summaryValue}>{table.total}</Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.row}>
-                      {visiblePeople.map(person => (
-                        <View key={person.id} style={[styles.summaryCell, { width: colWidth }]}>
-                          <Text style={styles.smallMoney} numberOfLines={1}>
-                            {pricesReady ? (table.people.get(person.id)?.amount || 0).toLocaleString('vi-VN') : '—'}
-                          </Text>
-                        </View>
-                      ))}
-                      <View style={[styles.summaryCell, { width: colWidth }]}>
-                        <Text style={styles.smallMoney}>—</Text>
-                      </View>
-                      <View style={[styles.summaryCell, { width: colWidth }]}>
-                        <Text style={styles.smallMoney} numberOfLines={1}>
-                          {pricesReady ? table.amount.toLocaleString('vi-VN') : '—'}
-                        </Text>
-                      </View>
-                    </View>
-
-                    <View style={styles.row}>
-                      {visiblePeople.map(person => {
-                        const state = monthlyPaymentState(payments.data || [], person.id, month);
-                        return (
-                          <TouchableOpacity
-                            key={person.id}
-                            accessibilityRole="button"
-                            accessibilityLabel={`Thanh toán ${person.fullName}: ${state.label}`}
-                            style={[styles.summaryCell, styles.paymentCell, { width: colWidth }]}
-                            onPress={() => setPaymentPerson(person)}
-                          >
-                            <Text
-                              style={[styles.paymentText, state.paid && { color: '#15803D' }]}
-                              numberOfLines={1}
-                            >
-                              {payments.isLoading || payments.isError ? '—' : state.paid ? '✓ Đã thu' : state.label}
-                            </Text>
-                          </TouchableOpacity>
-                        );
-                      })}
-                      <View style={[styles.summaryCell, { width: colWidth }]} />
-                      <View style={[styles.summaryCell, { width: colWidth }]} />
-                    </View>
-                  </>
-                )}
-              </View>
-            </ScrollView>
-          </View>
-
-          {/* Table Body */}
-          <View style={styles.body}>
-            <View style={styles.dateColumn}>
-              {range.dates.map(date => {
-                const day = table.days.get(date)!;
-                const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
-                const meal = table.mealsByDate.get(date);
-                const closed = !meal || Boolean(meal.isCancelled) || meal.status !== 'active';
-                const isToday = date === today;
-                return (
-                  <View
-                    key={date}
-                    style={[
-                      styles.dateCell,
-                      (weekday === 0 || weekday === 6) && styles.weekend,
-                      isToday && styles.todayDate,
-                    ]}
-                  >
-                    <Text style={[styles.dateText, isToday && styles.todayDateText]} numberOfLines={1}>
-                      {weekdays[weekday]} · {date.slice(8)}/{date.slice(5, 7)}
-                    </Text>
-                    <Text style={[styles.dayTotal, isToday && styles.todayDayTotal]} numberOfLines={1}>
-                      {!meal ? 'Chưa có lịch' : closed ? 'Bếp nghỉ' : `${day.total} suất`}
-                    </Text>
-                  </View>
-                );
-              })}
-            </View>
-
-            <ScrollView
-              horizontal
-              ref={bodyScroll}
-              style={styles.rightPane}
-              nestedScrollEnabled
-              showsHorizontalScrollIndicator
-              onScroll={event => headerScroll.current?.scrollTo({ x: event.nativeEvent.contentOffset.x, animated: false })}
-              scrollEventThrottle={16}
-            >
-              <View>
-                {range.dates.map(date => (
-                  <View key={date} style={[styles.row, date === today && styles.todayRow]}>
-                    {visiblePeople.map(person => cell(person, date))}
-                    <View style={[styles.cell, styles.totalCell, { width: colWidth }]}>
-                      <Text style={styles.number}>{table.days.get(date)?.guests || 0}</Text>
-                    </View>
-                    <View style={[styles.cell, styles.totalCell, { width: colWidth }]}>
-                      <Text style={styles.number}>{table.days.get(date)?.total || 0}</Text>
-                    </View>
-                  </View>
-                ))}
-              </View>
-            </ScrollView>
-          </View>
-        </ScrollView>
       ) : viewMode === 'staff' ? (
         /* ==================== VIEW 2: STAFF LIST CARDS ==================== */
-        <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
+        <MonthlyList flow={flow}>
           {visiblePeople.map(person => {
             const stats = table.people.get(person.id) || { staff: 0, guests: 0, amount: 0 };
             const paymentState = monthlyPaymentState(payments.data || [], person.id, month);
@@ -872,10 +555,10 @@ function MonthlyBoard() {
               </View>
             );
           })}
-        </ScrollView>
+        </MonthlyList>
       ) : (
         /* ==================== VIEW 3: DAY VIEW ==================== */
-        <View style={styles.dayViewWrapper}>
+        <View style={[styles.dayViewWrapper, flow && styles.flowDayView]}>
           {/* Horizontal scroll of dates */}
           <ScrollView
             horizontal
@@ -975,7 +658,7 @@ function MonthlyBoard() {
           </View>
 
           {/* Staff list on selected day */}
-          <ScrollView style={styles.listContainer} showsVerticalScrollIndicator={false}>
+          <MonthlyList flow={flow}>
             {dayPeople.map(person => {
               const record = table.cells.get(`${selectedDate}:${person.id}`);
               const meal = table.mealsByDate.get(selectedDate);
@@ -1032,7 +715,7 @@ function MonthlyBoard() {
                 </View>
               );
             })}
-          </ScrollView>
+          </MonthlyList>
         </View>
       )}
 
@@ -1180,6 +863,16 @@ function MonthlyBoard() {
 }
 
 const styles = StyleSheet.create({
+  flowContent: { paddingVertical: 12 },
+  flowHeader: { marginBottom: 12 },
+  flowDayView: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },
+  narrowMonthNav: { flexShrink: 0 },
+  narrowMonthArrow: { width: 28 },
+  narrowMonthButton: { paddingHorizontal: 2, gap: 4 },
+  narrowMonthText: { fontSize: 12 },
+  narrowFacility: { minWidth: 120, maxWidth: undefined },
+  narrowTabsContainer: { flexDirection: 'column', alignItems: 'stretch' },
+  narrowTabs: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', width: '100%' },
   // Controls row
   controlsRow: {
     flexDirection: 'row',
@@ -1339,35 +1032,6 @@ const styles = StyleSheet.create({
     color: colors.primaryDark,
     fontWeight: '700',
   },
-  gridQuickActions: {
-    flexDirection: 'row',
-    gap: 5,
-  },
-  gridActionChip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 3,
-    paddingHorizontal: 8,
-    paddingVertical: 5,
-    borderRadius: radius.full,
-    borderWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: colors.surface,
-  },
-  gridActionChipActive: {
-    backgroundColor: colors.primaryLight,
-    borderColor: colors.primary,
-  },
-  gridActionText: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: colors.textSecondary,
-  },
-  gridActionTextActive: {
-    color: colors.primaryDark,
-    fontWeight: '700',
-  },
-
   // Search & Filter
   searchSection: {
     marginBottom: 8,
@@ -1405,196 +1069,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
 
-  // Matrix Table
-  table: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: radius.lg,
-    backgroundColor: colors.surface,
-  },
-  tableHeader: {
-    flexDirection: 'row',
-    backgroundColor: '#0B4939',
-  },
-  dateHeader: {
-    width: DATE_WIDTH,
-    backgroundColor: '#0B4939',
-    borderRightWidth: 1,
-    borderColor: '#407565',
-  },
-  rightPane: {
-    flex: 1,
-  },
-  row: {
-    flexDirection: 'row',
-  },
-  nameHeader: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 4,
-  },
-  nameHeaderCompact: {
-    height: 48,
-  },
-  nameHeaderFull: {
-    height: 72,
-  },
-  personHeader: {
-    borderRightWidth: 1,
-    borderColor: '#407565',
-  },
-  personName: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    textAlign: 'center',
-    lineHeight: 14,
-    fontWeight: '700',
-  },
-  username: {
-    color: '#B8DACD',
-    fontSize: 9,
-    marginTop: 2,
-  },
-  compactHeaderStats: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    marginTop: 2,
-  },
-  compactBadgeCount: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: '#D5F5DF',
-  },
-  paymentDot: {
-    width: 6,
-    height: 6,
-    borderRadius: 3,
-  },
-  headerText: {
-    color: '#FFFFFF',
-    fontSize: 11,
-    fontWeight: '800',
-  },
-  headerSmall: {
-    color: '#D5E9E1',
-    fontSize: 10,
-  },
-  summaryLabel: {
-    height: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderTopWidth: 1,
-    borderColor: '#407565',
-  },
-  summaryCell: {
-    height: 28,
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderTopWidth: 1,
-    borderRightWidth: 1,
-    borderColor: '#407565',
-  },
-  summaryValue: {
-    color: '#FFFFFF',
-    fontWeight: '800',
-    fontSize: 13,
-  },
-  smallMoney: {
-    color: '#F8DB91',
-    fontSize: 9,
-    fontWeight: '700',
-  },
-  paymentCell: {
-    backgroundColor: '#E8F1EC',
-  },
-  paymentText: {
-    fontSize: 9,
-    color: '#76613B',
-    fontWeight: '700',
-  },
-  totalHeader: {
-    backgroundColor: '#8A671B',
-  },
-  body: {
-    flexDirection: 'row',
-  },
-  dateColumn: {
-    width: DATE_WIDTH,
-  },
-  dateCell: {
-    height: HEIGHT,
-    justifyContent: 'center',
-    paddingHorizontal: 8,
-    borderBottomWidth: 1,
-    borderRightWidth: 1,
-    borderColor: colors.border,
-    backgroundColor: '#F3F7F5',
-  },
-  dateText: {
-    fontSize: 11,
-    color: colors.primaryDark,
-    fontWeight: '700',
-  },
-  dayTotal: {
-    fontSize: 9,
-    color: colors.textSecondary,
-    marginTop: 1,
-  },
-  weekend: {
-    backgroundColor: '#FFF5F2',
-  },
-  todayDate: {
-    backgroundColor: '#0D5C46',
-  },
-  todayDateText: {
-    color: '#FFFFFF',
-  },
-  todayDayTotal: {
-    color: '#D5F5DF',
-  },
-  todayRow: {
-    backgroundColor: '#EDF8F0',
-  },
-  cell: {
-    height: HEIGHT,
-    borderRightWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: colors.border,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  mealCell: {
-    flexDirection: 'row',
-    gap: 2,
-  },
-  eating: {
-    backgroundColor: '#E9F7ED',
-  },
-  closed: {
-    backgroundColor: '#F5F5F5',
-  },
-  pending: {
-    backgroundColor: '#FFF5D8',
-  },
-  dash: {
-    color: '#ACB8B2',
-    fontSize: 13,
-  },
-  guestBadge: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: '#956608',
-  },
-  totalCell: {
-    backgroundColor: '#FFF6DC',
-  },
-  number: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: colors.primaryDark,
-  },
+  dash: { color: '#ACB8B2', fontSize: 13 },
 
   // Staff View Cards
   listContainer: {
