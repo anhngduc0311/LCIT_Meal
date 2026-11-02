@@ -214,7 +214,8 @@ class MealRegistrationService {
     // người khác qua data.userId, đó là nghiệp vụ quản lý bình thường).
     this.assertNotAdminSelfService(targetUserId, actor, "đăng ký");
 
-    const meal = await this.getMealOrFail(data.mealId);
+    const meal = await this.mealRepository.getWithCompletionStatus(data.mealId);
+    if (!meal) throw new AppError("Bếp ăn không tồn tại", 404);
 
     if (meal.isCancelled) {
       throw new AppError("Bếp ăn ngày này đã bị hủy, không thể đăng ký", 409);
@@ -226,12 +227,19 @@ class MealRegistrationService {
     if (meal.mealDate < todayStr) {
       throw new AppError("Không thể đăng ký suất ăn cho ngày đã qua", 409);
     }
-    await this.assertBeforeRegistrationCutoff(meal.mealDate);
+    const isManagement = (actor.roles || []).some(role => [ROLE.ADMIN, ROLE.MANAGER].includes(role));
+    if (meal.completionStatus === MEAL_COMPLETION_STATUS.COMPLETED) {
+      throw new AppError("Bữa ăn đã hoàn thành, không thể đăng ký thêm", 409);
+    }
+    if (!isManagement) await this.assertBeforeRegistrationCutoff(meal.mealDate);
 
     const existing = await this.mealRegistrationRepository.getByUserAndMeal(
       targetUserId,
       data.mealId,
     );
+    if (existing?.status === MEAL_REGISTRATION_STATUS.COMPLETED) {
+      throw new AppError("Suất ăn đã hoàn thành, không thể thay đổi", 409);
+    }
 
     const guestCount = Number(data.guestCount) || 0;
 

@@ -22,6 +22,45 @@ test('Business dates retain calendar date across timezones and year boundaries',
   assert.equal(f.formatDisplayDate(null), '');
 });
 
+test('Monthly meal table handles leap years, cancelled days, guests and completed meals', () => {
+  const m = app.load('utils/monthlyMeals.ts');
+  assert.equal(m.monthRange('2028-02').dates.length, 29);
+  assert.equal(m.shiftMonth('2026-12', 1), '2027-01');
+  assert.throws(() => m.monthRange('2026-13'));
+  const table = m.buildMonthlyMeals('2026-11', [
+    { userId: 1, mealDate: '2026-11-02', status: 'confirmed', guestCount: 2 },
+    { userId: 1, mealDate: '2026-11-03', status: 'completed', guestCount: 0 },
+    { userId: 1, mealDate: '2026-11-04', status: 'confirmed', guestCount: 3 },
+    { userId: 2, mealDate: '2026-11-02', status: 'cancelled', guestCount: 0 },
+    { userId: 2, mealDate: '2026-11-03', status: 'pending', guestCount: 4 },
+    { userId: 99, mealDate: '2026-11-02', status: 'confirmed', guestCount: 0 },
+    { userId: 1, mealDate: '2026-12-01', status: 'confirmed', guestCount: 0 },
+  ], [
+    { mealDate: '2026-11-02', status: 'active', isCancelled: false },
+    { mealDate: '2026-11-03', status: 'active', isCancelled: false },
+    { mealDate: '2026-11-04', status: 'active', isCancelled: true },
+  ], [1, 2], 30000, 40000);
+  assert.equal(table.total, 4);
+  assert.equal(table.completed, 1);
+  assert.equal(table.amount, 140000);
+  assert.deepEqual(table.days.get('2026-11-02'), { staff: 1, guests: 2, total: 3 });
+  assert.equal(table.people.get(2).staff, 0);
+  assert.equal(table.cells.get('2026-11-02:2').status, 'cancelled');
+});
+
+test('Monthly payment status distinguishes no invoice, partly paid and fully paid', () => {
+  const m = app.load('utils/monthlyMeals.ts');
+  assert.equal(m.monthlyPaymentState([], 1, '2026-11').label, 'Chưa lập');
+  const invoices = [
+    { userId: 1, paymentDate: '2026-11-01', isPaid: false, status: 'unpaid' },
+    { userId: 1, paymentDate: '2026-11-02', isPaid: true, status: 'paid' },
+    { userId: 2, paymentDate: '2026-11-01', isPaid: true, status: 'paid' },
+  ];
+  assert.equal(m.monthlyPaymentState(invoices, 1, '2026-11').paid, false);
+  assert.equal(m.monthlyPaymentState(invoices, 2, '2026-11').paid, true);
+  assert.equal(m.monthlyPaymentState(invoices, 1, '2026-12').label, 'Chưa lập');
+});
+
 test('Cancellation closes exactly at 08:00 Vietnam time, independently of device timezone', () => {
   const deadline = app.load('utils/cancellationDeadline.ts');
   assert.equal(deadline.isCancellationClosed('2026-10-23', Date.parse('2026-10-23T00:59:59.999Z')), false);

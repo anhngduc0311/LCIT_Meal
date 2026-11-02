@@ -2,7 +2,7 @@ import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
 import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useRouter, type Href } from 'expo-router';
 import { ScreenContainer } from '../common/ScreenContainer';
 import { Header } from '../common/Header';
 import { Card } from '../common/Card';
@@ -19,6 +19,7 @@ import { formatDisplayDate, getFullDayOfWeek } from '../../utils/formatters';
 import { colors } from '../../theme/colors';
 
 const actions = [
+  { title: 'Bảng suất ăn tháng', detail: 'Theo dõi ăn và thanh toán từng cán bộ', icon: 'grid-outline', path: '/management/monthly' },
   { title: 'Danh sách suất ăn', detail: 'Cán bộ và khách theo từng ngày', icon: 'people-outline', path: '/management/registrations' },
   { title: 'Lịch bếp ăn', detail: 'Sắp xếp ngày phục vụ, ngày nghỉ', icon: 'calendar-outline', path: '/management/meals' },
   { title: 'Quản lý thanh toán', detail: 'Theo dõi và đối soát tiền ăn', icon: 'wallet-outline', path: '/management/payments' },
@@ -96,7 +97,7 @@ export function KitchenManagerHome() {
       </Card>
 
       <Text style={styles.sectionTitle}>Quản lý bếp ăn</Text>
-      <View style={styles.grid}>{actions.map(action => <Card key={action.path} padding="lg" style={[styles.action, compact && { flexBasis: '100%', minWidth: 0 }]} onPress={() => router.push(action.path === '/management/registrations' ? { pathname: action.path, params: { date, facility: String(facility) } } : action.path)}><View style={styles.actionIcon}><Ionicons name={action.icon} size={23} color={colors.primary} /></View><Text style={styles.actionTitle}>{action.title}</Text><Text style={styles.detail}>{action.detail}</Text><Ionicons name="arrow-forward" size={19} color={colors.primary} style={styles.actionArrow} /></Card>)}</View>
+      <View style={styles.grid}>{actions.map(action => <Card key={action.path} padding="lg" style={[styles.action, compact && { flexBasis: '100%', minWidth: 0 }]} onPress={() => router.push(action.path === '/management/registrations' ? { pathname: action.path, params: { date, facility: String(facility) } } : action.path as Href)}><View style={styles.actionIcon}><Ionicons name={action.icon} size={23} color={colors.primary} /></View><Text style={styles.actionTitle}>{action.title}</Text><Text style={styles.detail}>{action.detail}</Text><Ionicons name="arrow-forward" size={19} color={colors.primary} style={styles.actionArrow} /></Card>)}</View>
       <Text style={styles.footnote}>Kéo xuống để cập nhật dữ liệu bếp ăn.</Text>
       {pickerOpen && <DatePickerModal visible mode="single" initialDate={date} title="Chọn ngày điều hành bếp" onSelectSingle={setDate} onClose={() => setPickerOpen(false)} />}
     </ScreenContainer>

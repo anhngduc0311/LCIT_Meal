@@ -22,7 +22,6 @@ import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Header } from '../../src/components/common/Header';
 import { Card } from '../../src/components/common/Card';
 import { ManagementMealChart } from '../../src/components/management/ManagementMealChart';
-import { AdminNonDiners } from '../../src/components/management/AdminNonDiners';
 import { Badge } from '../../src/components/common/Badge';
 import { Button } from '../../src/components/common/Button';
 import { ForbiddenState } from '../../src/components/states/ForbiddenState';
@@ -216,10 +215,6 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
             <Text style={styles.viewAllText}>Cán bộ</Text>
           </TouchableOpacity>
         </View>
-        {role === 'admin' && <AdminNonDiners key={`${today}-${facilityFilter}`}
-          records={todayRegistrations.filter(record => matchesFacility(getFacility(registrationPerson(record, facilityUsers), overrides), facilityFilter))}
-          disabled={!facilityReady || loadingUsers || usersError || cancelled || !homeData?.todayMeal}
-          facility={facilityLabel(facilityFilter)} date={formatBusinessDateDisplay(today)} />}
         <View style={styles.kpiContainer}>
           {/* Card 2 & 3: Pending & Outstanding - Hiển thị thành 1 dòng (2 cột) */}
           <View style={[styles.kpiRowSmall, wide && { flex: 1.2 }]}>
@@ -252,6 +247,10 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
             </Card>
           </View>
         </View>
+
+        <Button title="Bảng theo dõi suất ăn tháng" variant="outline"
+          leftIcon={<Ionicons name="grid-outline" size={20} color={colors.primary} />}
+          onPress={() => router.push('/management/monthly' as any)} style={{ marginBottom: 16 }} />
 
         {/* Biểu đồ số lượng suất ăn & Cán bộ */}
         <ManagementMealChart
