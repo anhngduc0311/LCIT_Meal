@@ -256,10 +256,6 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
         <Button title="Suất ăn · Bảng theo dõi tháng" variant="outline"
           leftIcon={<Ionicons name="grid-outline" size={20} color={colors.primary} />}
           onPress={() => router.push('/management/monthly' as any)} style={{ marginBottom: 16 }} />
-        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
-          <Button title="Tiền khách" variant="outline" style={{ flex: 1 }} onPress={() => router.push('/management/guests' as any)} />
-          <Button title="Thanh toán" variant="outline" style={{ flex: 1 }} onPress={() => router.push('/management/payments' as any)} />
-        </View>
 
         {/* Biểu đồ số lượng suất ăn & Cán bộ */}
         <ManagementMealChart

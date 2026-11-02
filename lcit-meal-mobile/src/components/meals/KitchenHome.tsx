@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { Text, View, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
 import { ScreenContainer } from '../common/ScreenContainer';
 import { Header } from '../common/Header';
 import { Card } from '../common/Card';
@@ -16,7 +15,6 @@ import { spacing } from '../../theme/spacing';
 import { radius } from '../../theme/radius';
 
 export function KitchenHome() {
-  const router = useRouter();
   const { user } = useAuth();
   const today = formatBusinessDate(new Date());
   const [selectedDate, setSelectedDate] = useState(today);
@@ -79,11 +77,6 @@ export function KitchenHome() {
           )}
         </Card>
       )}
-      <Card padding="md" style={{ marginTop: 16, gap: 10 }}>
-        <Text style={styles.kpiTitle}>Thu tiền ăn cuối tháng</Text>
-        <Text style={styles.dateHint}>Xem tiền từng cán bộ, tiền khách riêng và xác nhận thanh toán.</Text>
-        <Button title="Quản lý Thu Tiền Ăn" variant="outline" onPress={() => router.push('/management/payments')} />
-      </Card>
       {datePickerOpen && <DatePickerModal visible mode="single" initialDate={selectedDate}
         title="Chọn ngày xem bếp ăn" onSelectSingle={setSelectedDate} onClose={() => setDatePickerOpen(false)} />}
     </ScreenContainer>
