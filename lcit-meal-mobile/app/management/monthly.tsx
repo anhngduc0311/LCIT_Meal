@@ -90,6 +90,7 @@ function MonthlyBoard() {
   const [paymentPerson, setPaymentPerson] = useState<User | null>(null);
   const [invoice, setInvoice] = useState<Payment | null>(null);
   const [guestOpen, setGuestOpen] = useState(false);
+  const [guestMode, setGuestMode] = useState<'add' | 'remove'>('add');
   const [guestDate, setGuestDate] = useState(today);
   const [guestExtra, setGuestExtra] = useState(1);
 
@@ -209,15 +210,23 @@ function MonthlyBoard() {
   // Day View helpers
   const selectedMeal = table.mealsByDate.get(selectedDate);
   const selectedDayStats = table.days.get(selectedDate) || { staff: 0, guests: 0, total: 0 };
+  const removableGuests = (date: string) => standaloneGuests.filter(item => item.mealDate === date)
+    .reduce((sum, item) => sum + Number(item.guestCount), 0);
   const saveGuests = async () => {
     const meal = table.mealsByDate.get(guestDate);
     if (busy.current || !meal || (facility !== 1 && facility !== 2)) return;
+    if (guestMode === 'remove' && guestExtra > removableGuests(guestDate)) {
+      setNotice({ variant: 'error', message: 'Số suất khách cần bỏ vượt quá số đã thêm.' });
+      setGuestOpen(false);
+      return;
+    }
     busy.current = true; setSaving(true);
     try {
-      await mealService.addMealGuests(meal.id, facility, guestExtra, isMockMode);
-      setNotice({ variant: 'success', message: `Đã thêm ${guestExtra} suất khách cho Cơ sở ${facility}, ngày ${formatDisplayDate(guestDate)}.` });
+      const updateGuests = guestMode === 'remove' ? mealService.removeMealGuests : mealService.addMealGuests;
+      await updateGuests(meal.id, facility, guestExtra, isMockMode);
+      setNotice({ variant: 'success', message: `Đã ${guestMode === 'remove' ? 'bỏ' : 'thêm'} ${guestExtra} suất khách cho Cơ sở ${facility}, ngày ${formatDisplayDate(guestDate)}.` });
     } catch (error) {
-      setNotice({ variant: 'error', message: error instanceof Error ? error.message : 'Chưa thêm được suất khách.' });
+      setNotice({ variant: 'error', message: error instanceof Error ? error.message : 'Chưa cập nhật được suất khách.' });
     } finally {
       setGuestOpen(false);
       await Promise.all([
@@ -659,9 +668,9 @@ function MonthlyBoard() {
 
             <View style={styles.guestDayActions}>
               <Text style={styles.selectedDaySub}>{selectedDayStats.staff} cán bộ · {selectedDayStats.guests} khách</Text>
-              <Button title="Thêm suất khách" size="sm" variant="outline"
+              <Button title="Điều chỉnh khách" size="sm" variant="outline"
                 disabled={saving || !selectedMeal || Boolean(selectedMeal.isCancelled) || selectedMeal.status !== 'active' || (facility !== 1 && facility !== 2)}
-                onPress={() => { setGuestDate(selectedDate); setGuestExtra(1); setGuestOpen(true); }} />
+                onPress={() => { setGuestMode('add'); setGuestDate(selectedDate); setGuestExtra(1); setGuestOpen(true); }} />
             </View>
             {/* Sub-filter chips for day view */}
             <View style={styles.daySubFilterRow}>
@@ -804,14 +813,25 @@ function MonthlyBoard() {
         <ModalBackdrop style={styles.backdrop}>
           <ModalCard style={[styles.dialog, { maxHeight: '92%', padding: 0 }]}>
             <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 12 }} nestedScrollEnabled>
-              <Text style={styles.dialogTitle}>Thêm suất khách</Text>
+              <Text style={styles.dialogTitle}>Điều chỉnh khách</Text>
               <Text style={styles.dialogHint}>Ngày ăn: {formatDisplayDate(guestDate)}</Text>
               <Text style={styles.dialogHint}>Cơ sở {facility}</Text>
-              <GuestCounter value={guestExtra} onChange={setGuestExtra} min={1} max={1000} disabled={saving}
-                label="Số suất khách cần thêm" valueDescription={`${guestExtra} suất khách`} helperText="" />
+              <View style={styles.actions}>
+                <Button title="Thêm khách" size="sm" variant={guestMode === 'add' ? 'primary' : 'secondary'}
+                  accessibilityState={{ selected: guestMode === 'add' }} disabled={saving}
+                  onPress={() => { setGuestMode('add'); setGuestExtra(1); }} style={{ flex: 1 }} />
+                <Button title="Bớt khách" size="sm" variant={guestMode === 'remove' ? 'primary' : 'secondary'}
+                  accessibilityState={{ selected: guestMode === 'remove' }} disabled={saving || removableGuests(guestDate) === 0}
+                  onPress={() => { setGuestMode('remove'); setGuestExtra(1); }} style={{ flex: 1 }} />
+              </View>
+              <GuestCounter value={guestExtra} onChange={setGuestExtra} min={1} max={guestMode === 'remove' ? Math.max(1, Math.min(1000, removableGuests(guestDate))) : 1000} disabled={saving}
+                label={guestMode === 'remove' ? 'Số suất khách cần bớt' : 'Số suất khách cần thêm'} valueDescription={`${guestExtra} suất khách`}
+                helperText={guestMode === 'remove' ? `Có thể bớt ${removableGuests(guestDate)} suất khách đã thêm riêng cho cơ sở này.` : ''} />
               <View style={styles.actions}>
                 <Button title="Hủy" variant="secondary" disabled={saving} onPress={() => setGuestOpen(false)} style={{ flex: 1 }} />
-                <Button title="Thêm khách" loading={saving} onPress={() => { void saveGuests(); }} style={{ flex: 1 }} />
+                <Button title={guestMode === 'remove' ? 'Xác nhận bớt' : 'Xác nhận thêm'} loading={saving}
+                  disabled={guestMode === 'remove' && (guestExtra > removableGuests(guestDate) || removableGuests(guestDate) === 0)}
+                  onPress={() => { void saveGuests(); }} style={{ flex: 1 }} />
               </View>
             </ScrollView>
           </ModalCard>
@@ -915,7 +935,7 @@ function MonthlyBoard() {
 }
 
 const styles = StyleSheet.create({
-  guestDayActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 8 },
+  guestDayActions: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 8 },
   flowContent: { paddingVertical: 12 },
   flowHeader: { marginBottom: 12 },
   flowDayView: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },

@@ -260,6 +260,12 @@ export const mealService = {
     return apiClient<import('../types').MealGuestCount[]>(`/meals/guests?${query}`);
   },
 
+  async removeMealGuests(mealId: number, facilityId: 1 | 2, count: number, useMock = false): Promise<import('../types').MealGuestCount> {
+    if (!Number.isInteger(count) || count < 1 || count > 1000) throw new Error('Số suất khách phải từ 1 đến 1000.');
+    if (useMock) return mockStore.removeMealGuests(mealId, facilityId, count);
+    return apiClient<import('../types').MealGuestCount>(`/meals/${mealId}/guests/remove`, { method: 'PATCH', body: JSON.stringify({ facilityId, count }) });
+  },
+
   async addMealGuests(mealId: number, facilityId: 1 | 2, count: number, useMock = false): Promise<import('../types').MealGuestCount> {
     if (!Number.isInteger(count) || count < 1 || count > 1000) throw new Error('Số suất khách phải từ 1 đến 1000.');
     if (useMock) return mockStore.addMealGuests(mealId, facilityId, count);

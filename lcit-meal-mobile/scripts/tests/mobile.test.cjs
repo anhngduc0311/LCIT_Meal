@@ -328,6 +328,75 @@ test('Only pending range and permanent cancellations need approval; daily cuts n
   assert.equal(options[0].id, 1);
 });
 
+test('Removing standalone guests updates totals and preserves other facilities', async () => {
+  const { mealService } = app.load('services/mealService.ts');
+  const { mockStore } = app.load('services/mockStore.ts');
+  const meal = mockStore.getMeals().find(item => !item.isCancelled && item.status === 'active');
+  assert.ok(meal);
+  await mealService.addMealGuests(meal.id, 1, 3, true);
+  await mealService.addMealGuests(meal.id, 2, 2, true);
+  assert.equal((await mealService.removeMealGuests(meal.id, 1, 1, true)).guestCount, 2);
+  await assert.rejects(mealService.removeMealGuests(meal.id, 1, 3, true), /Không đủ/);
+  assert.equal((await mealService.removeMealGuests(meal.id, 1, 2, true)).guestCount, 0);
+  const guests = await mealService.getMealGuestCounts({}, true);
+  assert.equal(guests.find(item => item.mealId === meal.id && item.facilityId === 2).guestCount, 2);
+  const { buildMonthlyMeals } = app.load('utils/monthlyMeals.ts');
+  const table = buildMonthlyMeals(meal.mealDate.slice(0, 7), [], [meal], [], 30000, 35000, guests);
+  assert.equal(table.total, 2);
+  assert.equal(table.amount, 70000);
+});
+
+test('Monthly collections exist before invoicing and separate staff, linked guests and facility guests', () => {
+  const { buildMonthlyCollections } = app.load('utils/monthlyCollections.ts');
+  const meals = [
+    { id: 1, mealDate: '2026-11-02', status: 'active', isCancelled: false },
+    { id: 2, mealDate: '2026-11-03', status: 'active', isCancelled: true },
+    { id: 3, mealDate: '2026-11-30', status: 'active', isCancelled: false },
+  ];
+  const records = [
+    { userId: 1, mealDate: '2026-11-02', status: 'completed', guestCount: 2 },
+    { userId: 1, mealDate: '2026-11-03', status: 'confirmed', guestCount: 5 },
+    { userId: 1, mealDate: '2026-11-30', status: 'confirmed', guestCount: 0 },
+    { userId: 2, mealDate: '2026-11-02', status: 'cancelled', guestCount: 1 },
+  ];
+  const users = [{ id: 1, fullName: 'Nguyễn An', username: 'an' }, { id: 2, fullName: 'Bình', username: 'binh' }];
+  const guests = [
+    { facilityId: 1, mealDate: '2026-11-02', guestCount: 3 },
+    { facilityId: 2, mealDate: '2026-11-03', guestCount: 7 },
+  ];
+  const result = buildMonthlyCollections('2026-11', users, records, meals, [], 30000, 35000, guests);
+  assert.equal(result.dueDate, '2026-11-30');
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.rows[0].staffAmount, 60000);
+  assert.equal(result.rows[0].guestAmount, 70000);
+  assert.equal(result.rows[0].remainingAmount, 130000);
+  assert.equal(result.standaloneGuestAmount, 105000);
+  assert.equal(result.remainingAmount, 130000);
+  assert.equal(result.standalone[1].amount, 0);
+  const bill = { userId: 1, paymentDate: '2026-11-30', amount: 130000, status: 'paid', isPaid: 1, paidAmount: 50000 };
+  const partial = buildMonthlyCollections('2026-11', users, records, meals, [bill], 30000, 35000, guests);
+  assert.equal(partial.rows[0].totalAmount, 130000);
+  assert.equal(partial.rows[0].remainingAmount, 80000);
+  const otherMonth = buildMonthlyCollections('2026-11', users, records, meals, [{ ...bill, paymentDate: '2026-10-31' }], 30000, 35000, guests);
+  assert.equal(otherMonth.paidAmount, 0);
+  const overpaid = buildMonthlyCollections('2026-11', users, records, meals, [{ ...bill, paidAmount: 150000 }], 30000, 35000, guests);
+  assert.equal(overpaid.rows[0].remainingAmount, 0);
+  assert.equal(overpaid.rows[0].creditAmount, 20000);
+  assert.throws(() => buildMonthlyCollections('2026-11', [], [], [], [], NaN, 35000), /đơn giá/);
+});
+
+test('Monthly collections retain invoice-only people and explain invoice differences without double counting', () => {
+  const { buildMonthlyCollections } = app.load('utils/monthlyCollections.ts');
+  const result = buildMonthlyCollections('2028-02', [], [], [], [
+    { userId: 99, userName: 'Cán bộ cũ', paymentDate: '2028-02-29', amount: 100000, status: 'paid', isPaid: true, paidAmount: 0 },
+  ], 30000, 35000);
+  assert.equal(result.dueDate, '2028-02-29');
+  assert.equal(result.rows[0].name, 'Cán bộ cũ');
+  assert.equal(result.rows[0].adjustmentAmount, 100000);
+  assert.equal(result.rows[0].paidAmount, 0);
+  assert.equal(result.rows[0].remainingAmount, 100000);
+});
+
 test('Standalone guests count by facility/day without adding staff or personal charges', () => {
   const { buildMonthlyMeals } = app.load('utils/monthlyMeals.ts');
   const { summarizeFacilityMeals } = app.load('utils/facilities.ts');

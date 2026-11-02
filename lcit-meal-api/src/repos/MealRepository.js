@@ -62,6 +62,17 @@ const getCompletionStatusParams = () => {
 };
 
 class MealRepository {
+  async removeGuestCount(mealId, facilityId, count, actorId) {
+    const [result] = await pool.query(`UPDATE meal_guest_count
+      SET guest_count=guest_count-?, updated_by=?, updated_at=NOW()
+      WHERE meal_id=? AND facility_id=? AND guest_count>=?
+      AND EXISTS (SELECT 1 FROM meal WHERE id=? AND is_cancelled=0 AND status='active')`,
+    [count, actorId || null, mealId, facilityId, count, mealId]);
+    if (!result.affectedRows) return null;
+    const [[row]] = await pool.query('SELECT meal_id,facility_id,guest_count FROM meal_guest_count WHERE meal_id=? AND facility_id=?', [mealId, facilityId]);
+    return { mealId: row.meal_id, facilityId: row.facility_id, guestCount: row.guest_count };
+  }
+
   async filterGuestCounts(fromDate, toDate) {
     const [rows] = await pool.query(`SELECT g.meal_id, g.facility_id, g.guest_count, DATE_FORMAT(m.meal_date, '%Y-%m-%d') AS meal_date
       FROM meal_guest_count g JOIN meal m ON m.id=g.meal_id

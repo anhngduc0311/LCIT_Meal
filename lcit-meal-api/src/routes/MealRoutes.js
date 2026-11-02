@@ -18,6 +18,7 @@ const mealRoutes = (mealController, authMiddleware, authorize) => {
   // GET /api/meals/:id
   router.get('/guests', authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN), mealController.guestCounts);
   router.patch('/:id/guests', authorize(ROLE.ADMIN, ROLE.MANAGER), mealController.addGuests);
+  router.patch('/:id/guests/remove', authorize(ROLE.ADMIN, ROLE.MANAGER), mealController.removeGuests);
 
   router.get("/:id", authorize(...ROLE.STAFF_ROLES), mealController.get);
 

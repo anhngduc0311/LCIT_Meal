@@ -47,11 +47,15 @@ import { spacing } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
 import { radius } from '../../src/theme/radius';
 import { Payment, PaymentStatus } from '../../src/types';
+import { MonthlyCollections } from '../../src/components/management/MonthlyCollections';
+import { monthRange } from '../../src/utils/monthlyMeals';
+import { formatBusinessDate } from '../../src/utils/formatters';
 
 export default function ManagementPaymentsScreen() {
   const router = useRouter();
   const { user, role, isMockMode } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
+  const [monthlyView, setMonthlyView] = useState(true);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
@@ -326,25 +330,28 @@ export default function ManagementPaymentsScreen() {
 
   const handleOpenCreateModal = () => {
     if (users.length > 0) setFormUserId(users[0].id);
-    const now = new Date();
-    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
-    setFormPaymentDate(`${currentMonth}-25`);
-    setFormAmount('660000');
+    const currentMonth = formatBusinessDate(new Date()).slice(0, 7);
+    setFormPaymentDate(monthRange(currentMonth).to);
+    setFormAmount('');
     setFormStatus('unpaid');
     setUserSearchQuery('');
     setIsUserDropdownOpen(false);
     setIsCreateOpen(true);
   };
 
-  const ListHeader = (
-    <View>
+  const viewSwitcher = <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
+    <Button title="Cuối tháng" size="sm" variant={monthlyView ? 'primary' : 'secondary'} style={{ flex: 1 }} onPress={() => setMonthlyView(true)} />
+    <Button title="Khoản thu" size="sm" variant={!monthlyView ? 'primary' : 'secondary'} style={{ flex: 1 }} onPress={() => setMonthlyView(false)} />
+  </View>;
+
+  const pageHeader = <>
       <Header
         title="Quản lý Thu Tiền Ăn"
-        subtitle="Lập đợt thu, xác nhận đã đóng và xuất báo cáo"
+        subtitle={monthlyView ? 'Tiền cuối tháng từng người · tiền khách tách riêng' : 'Khoản thu đã lập, xác nhận đóng và xuất báo cáo'}
         showBack
         onBack={() => router.back()}
         userRole={role || undefined}
-        rightAction={
+        rightAction={!monthlyView ?
           <TouchableOpacity
             style={styles.headerBtn}
             onPress={handleExport}
@@ -357,9 +364,15 @@ export default function ManagementPaymentsScreen() {
             ) : (
               <Ionicons name="download-outline" size={20} color={colors.primary} />
             )}
-          </TouchableOpacity>
+          </TouchableOpacity> : undefined
         }
       />
+      {viewSwitcher}
+    </>;
+
+  const ListHeader = (
+    <View>
+      {pageHeader}
 
       {/* Summary KPI Mini */}
       <View style={styles.kpiRow}>
@@ -421,7 +434,10 @@ export default function ManagementPaymentsScreen() {
 
   return (
     <ScreenContainer scrollable={false} backgroundColor={colors.background}>
-      <FlatList
+      {monthlyView ? <MonthlyCollections header={pageHeader} onPrepareInvoice={(userId, date, amount) => {
+        setFormUserId(userId); setFormPaymentDate(date); setFormAmount(String(amount));
+        setFormStatus('unpaid'); setUserSearchQuery(''); setIsUserDropdownOpen(false); setIsCreateOpen(true);
+      }} /> : <FlatList
         data={filteredPayments}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderPaymentItem}
@@ -439,10 +455,10 @@ export default function ManagementPaymentsScreen() {
         initialNumToRender={12}
         maxToRenderPerBatch={10}
         windowSize={5}
-      />
+      />}
 
       {/* Nút Tạo Khoản Thu ở góc dưới bên phải (Floating Action Button) */}
-      <TouchableOpacity
+      {!monthlyView && <TouchableOpacity
         style={styles.fab}
         onPress={handleOpenCreateModal}
         activeOpacity={0.85}
@@ -450,7 +466,7 @@ export default function ManagementPaymentsScreen() {
         accessibilityRole="button"
       >
         <Ionicons name="add" size={28} color={colors.textInverse} />
-      </TouchableOpacity>
+      </TouchableOpacity>}
 
       {/* Modal Tạo Khoản Thu - Tích hợp DatePickerInput & Searchable Dropdown */}
       <Modal visible={isCreateOpen} transparent animationType="slide" onRequestClose={() => setIsCreateOpen(false)}>

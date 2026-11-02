@@ -111,7 +111,27 @@ async function main() {
   await req('admin', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 3, count: 1 }, 400);
   await req('admin', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 0 }, 400);
   await req('employee', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 1 }, 403);
+  const removeRoute = `/meals/${oldMeal.insertId}/guests/remove`;
+  await req('employee', removeRoute, 'PATCH', { facilityId: 1, count: 1 }, 403);
+  await req('kitchen', removeRoute, 'PATCH', { facilityId: 1, count: 1 }, 403);
+  for (const count of [0, -1, 1.5, 1001]) {
+    await req('admin', removeRoute, 'PATCH', { facilityId: 1, count }, 400);
+  }
+  await req('admin', removeRoute, 'PATCH', { facilityId: 3, count: 1 }, 400);
+  assert.equal((await req('manager', removeRoute, 'PATCH', { facilityId: 1, count: 2 })).guestCount, 3);
+  await req('admin', removeRoute, 'PATCH', { facilityId: 1, count: 4 }, 409);
+  const concurrentCuts = await Promise.all([1, 2].map(() => fetch(`${base}/api${removeRoute}`, {
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokens.manager}` },
+    body: JSON.stringify({ facilityId: 1, count: 2 }),
+  })));
+  assert.deepEqual(concurrentCuts.map(response => response.status).sort(), [200, 409]); checks++;
+  assert.equal((await req('admin', removeRoute, 'PATCH', { facilityId: 1, count: 1 })).guestCount, 0);
+  const remainingGuests = await req('admin', '/meals/guests?from=2001-01-02&to=2001-01-02');
+  assert.equal(remainingGuests.find(g => g.facilityId === 1).guestCount, 0);
+  assert.equal(remainingGuests.find(g => g.facilityId === 2).guestCount, 4);
+  assert.equal((await req('kitchen', '/dashboard/home?date=2001-01-02')).todayStaff.total_meal_slots, 4);
   await pool.query('UPDATE meal SET is_cancelled=1 WHERE id=?', [oldMeal.insertId]);
+  await req('manager', removeRoute, 'PATCH', { facilityId: 2, count: 1 }, 409);
   await req('manager', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 1 }, 409);
   assert.equal((await req('admin', '/meals/guests?from=2001-01-02&to=2001-01-02')).length, 0);
   await req('employee', '/notifications/me');

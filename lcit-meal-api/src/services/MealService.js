@@ -21,6 +21,18 @@ class MealService {
 
   async guestCounts(from, to) { return this.mealRepository.filterGuestCounts(from, to); }
 
+  async removeGuests(id, data, actor = {}) {
+    if (!(actor.roles || []).some(role => ['admin', 'manager'].includes(role))) throw new AppError('Bạn không có quyền bỏ suất khách', 403);
+    if (![1, 2].includes(data.facilityId) || !Number.isInteger(data.count) || data.count < 1 || data.count > 1000) {
+      throw new AppError('Chọn cơ sở hợp lệ và số suất khách từ 1 đến 1000', 400);
+    }
+    const meal = await this.get(id);
+    const result = await this.mealRepository.removeGuestCount(id, data.facilityId, data.count, actor.actorId);
+    if (!result) throw new AppError('Số suất khách đã thay đổi, không đủ để bỏ hoặc bếp đã ngừng phục vụ. Vui lòng tải lại.', 409);
+    await this.logAction(LOG_ACTION.ACTION_UPDATE, actor, `meal:${id}`, `Bỏ ${data.count} suất khách cơ sở ${data.facilityId}, ngày ${meal.mealDate}`, null, result);
+    return { ...result, mealDate: meal.mealDate };
+  }
+
   async addGuests(id, data, actor = {}) {
     if (!(actor.roles || []).some(role => ['admin', 'manager'].includes(role))) throw new AppError('Bạn không có quyền thêm suất khách', 403);
     if (![1,2].includes(data.facilityId) || !Number.isInteger(data.count) || data.count < 1 || data.count > 1000) {

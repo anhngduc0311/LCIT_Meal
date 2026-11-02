@@ -43,6 +43,15 @@ import {
 
 class MockStore {
   private mealGuestCounts: MealGuestCount[] = [];
+  removeMealGuests(mealId: number, facilityId: 1 | 2, count: number): MealGuestCount {
+    const meal = this.meals.find(item => item.id === mealId && !item.isCancelled && item.status === 'active');
+    if (!meal) throw new Error('Bếp không phục vụ ngày này.');
+    const item = this.mealGuestCounts.find(item => item.mealId === mealId && item.facilityId === facilityId);
+    if (!Number.isInteger(count) || count < 1 || count > 1000 || !item || item.guestCount < count) throw new Error('Không đủ suất khách để bỏ. Vui lòng tải lại.');
+    item.guestCount -= count;
+    this.notify();
+    return { ...item };
+  }
   getMealGuestCounts(from?: string, to?: string): MealGuestCount[] {
     return this.mealGuestCounts.filter(item => (!from || item.mealDate >= from) && (!to || item.mealDate <= to)
       && this.meals.some(meal => meal.id === item.mealId && !meal.isCancelled && meal.status === 'active'));
