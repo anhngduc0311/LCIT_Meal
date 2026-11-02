@@ -6,6 +6,9 @@
 
 import { apiClient, extractDataList } from './apiClient';
 import { mockStore } from './mockStore';
+import { monthRange } from '../utils/monthlyMeals';
+import { systemSettingService } from './systemSettingService';
+import { mealService } from './mealService';
 import {
   Payment,
   PaymentSummary,
@@ -15,9 +18,19 @@ import {
   PaymentFilterParams,
   PaginatedData,
   MealLedger,
+  MonthlyCollectionBoard,
 } from '../types';
 
 export const paymentService = {
+  async getMonthlyBoard(month: string, useMock = false): Promise<MonthlyCollectionBoard> {
+    if (!useMock) return apiClient<MonthlyCollectionBoard>(`/payments/monthly-board?month=${encodeURIComponent(month)}`);
+    const range = monthRange(month);
+    const [registrations, meals, payments, settings] = await Promise.all([
+      mealService.filterRegistrations(range, true), mealService.filterMeals(range, true),
+      this.filterPayments(range, true), systemSettingService.getAllSettings(true),
+    ]);
+    return { users: mockStore.getAllUsers(), registrations, meals, payments, settings, guests: mockStore.getMealGuestCounts(range.from, range.to) };
+  },
   async getMyMealLedger(useMock = false): Promise<MealLedger> {
     if (useMock) {
       const payments = await this.getMyPayments(true);

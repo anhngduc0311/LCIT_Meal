@@ -253,9 +253,13 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
           </View>
         </View>
 
-        <Button title="Bảng theo dõi suất ăn tháng" variant="outline"
+        <Button title="Suất ăn · Bảng theo dõi tháng" variant="outline"
           leftIcon={<Ionicons name="grid-outline" size={20} color={colors.primary} />}
           onPress={() => router.push('/management/monthly' as any)} style={{ marginBottom: 16 }} />
+        <View style={{ flexDirection: 'row', gap: 10, marginBottom: 16 }}>
+          <Button title="Tiền khách" variant="outline" style={{ flex: 1 }} onPress={() => router.push('/management/guests' as any)} />
+          <Button title="Thanh toán" variant="outline" style={{ flex: 1 }} onPress={() => router.push('/management/payments' as any)} />
+        </View>
 
         {/* Biểu đồ số lượng suất ăn & Cán bộ */}
         <ManagementMealChart
@@ -370,7 +374,7 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
                 <Ionicons name="wallet-outline" size={24} color="#15803D" />
               </View>
               <Text style={styles.menuGridTitle}>Quản lý Thu tiền</Text>
-              <Text style={styles.menuGridDesc}>Lập hóa đơn, xác nhận đã đóng & xuất báo cáo</Text>
+              <Text style={styles.menuGridDesc}>Tự chốt cuối tháng, xác nhận đã đóng & xuất báo cáo</Text>
             </Card>
 
             {/* Phân hệ 4: Người dùng (Admin / Manager) */}

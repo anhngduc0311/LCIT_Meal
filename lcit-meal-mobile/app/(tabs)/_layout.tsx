@@ -107,7 +107,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="payments"
         options={{
-          href: (role === 'kitchen' || role === 'admin') ? null : '/payments',
+          href: role === 'admin' ? null : '/payments',
           title: 'Thanh toán',
           tabBarLabel: tabLabel('Thanh toán'),
           tabBarIcon: ({ color, focused }) => (

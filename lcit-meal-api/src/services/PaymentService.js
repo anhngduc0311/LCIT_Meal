@@ -15,6 +15,25 @@ class PaymentService {
     return this.paymentRepository.list();
   }
 
+  async monthlyBoard(month) {
+    if (typeof month !== 'string' || !/^\d{4}-(0[1-9]|1[0-2])$/.test(month) || Number(month.slice(0, 4)) < 2000) throw new AppError('Tháng không hợp lệ', 400);
+    const [year, number] = month.split('-').map(Number);
+    const from = `${month}-01`;
+    const to = new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10);
+    const MealRepository = require('../repos/MealRepository');
+    const RegistrationRepository = require('../repos/MealRegistrationRepository');
+    const UserRepository = require('../repos/UserRepository');
+    const mealRepository = new MealRepository();
+    const [users, registrations, meals, guests, payments, settings] = await Promise.all([
+      new UserRepository().list(), new RegistrationRepository().filter(null, null, null, from, to),
+      mealRepository.filter(from, to), mealRepository.filterGuestCounts(from, to),
+      this.filter(null, null, from, to), this.paymentRepository.collectionPrices(),
+    ]);
+    return { users: users.map(u => ({ id: u.id, fullName: u.fullName, username: u.username })),
+      registrations: registrations.map(r => ({ userId: r.userId, mealDate: r.mealDate, guestCount: r.guestCount, status: r.status })),
+      meals, guests, payments, settings };
+  }
+
   async get(id) {
     const payment = await this.paymentRepository.get(id);
 

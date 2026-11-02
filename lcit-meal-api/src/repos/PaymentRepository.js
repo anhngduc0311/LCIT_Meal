@@ -20,6 +20,11 @@ const PAYMENT_JOIN_USER = `
 `;
 
 class PaymentRepository {
+  async collectionPrices() {
+    const [rows] = await pool.query("SELECT setting_key,setting_value FROM system_setting WHERE setting_key IN ('meal_price','guest_meal_price')");
+    return rows.map(row => ({ settingKey: row.setting_key, settingValue: row.setting_value }));
+  }
+
   async generateMonthlyPayments(date, time, userId) {
     const [settings] = await pool.query("SELECT setting_key,setting_value FROM system_setting WHERE setting_key IN ('meal_price','guest_meal_price','meal_completion_time')");
     const value = key => settings.find(s => s.setting_key === key)?.setting_value;

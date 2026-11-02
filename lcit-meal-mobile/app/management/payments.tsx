@@ -73,7 +73,7 @@ export default function ManagementPaymentsScreen() {
   const [markPaidAmount, setMarkPaidAmount] = useState('');
   const [markPaidBillImg, setMarkPaidBillImg] = useState('');
 
-  const hasAccess = role === 'admin' || role === 'manager';
+  const hasAccess = role === 'admin' || role === 'manager' || role === 'kitchen';
 
   const { data: payments = [], isLoading, refetch } = useManagementPayments();
 
@@ -241,7 +241,7 @@ export default function ManagementPaymentsScreen() {
             </View>
 
             <View style={styles.actionBtnsRight}>
-              <TouchableOpacity
+              {role !== 'kitchen' && <TouchableOpacity
                 style={styles.iconBtn}
                 onPress={() => {
                   setSelectedPayment(p);
@@ -253,7 +253,7 @@ export default function ManagementPaymentsScreen() {
                 activeOpacity={0.7}
               >
                 <Ionicons name="create-outline" size={18} color={colors.textSecondary} />
-              </TouchableOpacity>
+              </TouchableOpacity>}
 
               {role === 'admin' && (
                 <TouchableOpacity

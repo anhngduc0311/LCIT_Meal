@@ -4,6 +4,10 @@ const { sendExcel } = require("../ultis/excelExport");
 const { getActor } = require("../ultis/actor");
 
 class PaymentController {
+  monthlyBoard = async (req, res, next) => {
+    try { return ApiResponse.success(res, await this.paymentService.monthlyBoard(req.query.month)); }
+    catch (error) { next(error); }
+  };
   constructor(paymentService) {
     this.paymentService = paymentService;
   }

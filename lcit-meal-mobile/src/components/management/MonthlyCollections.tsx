@@ -1,11 +1,9 @@
 import React, { useState } from 'react';
 import { FlatList, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useManagementRegistrations } from '../../hooks/useManagementRegistrations';
-import { useManagementMeals, useMealGuestCounts } from '../../hooks/useManagementMeals';
-import { useManagementPayments } from '../../hooks/useManagementPayments';
-import { useUsersList } from '../../hooks/useManagementUsers';
-import { useSystemSettings } from '../../hooks/useManagementSettings';
+import { useQuery } from '@tanstack/react-query';
+import { useAuth } from '../../providers/AuthProvider';
+import { paymentService } from '../../services/paymentService';
 import { buildMonthlyCollections } from '../../utils/monthlyCollections';
 import { monthRange, shiftMonth } from '../../utils/monthlyMeals';
 import { formatBusinessDate, formatCurrency, formatDisplayDate } from '../../utils/formatters';
@@ -22,28 +20,24 @@ export function MonthlyCollections({ header }: {
   const [month, setMonth] = useState(() => formatBusinessDate(new Date()).slice(0, 7));
   const [search, setSearch] = useState('');
   const range = monthRange(month);
-  const registrations = useManagementRegistrations({ from: range.from, to: range.to });
-  const meals = useManagementMeals({ from: range.from, to: range.to });
-  const guests = useMealGuestCounts({ from: range.from, to: range.to });
-  const payments = useManagementPayments({ from: range.from, to: range.to });
-  const users = useUsersList();
-  const settings = useSystemSettings();
-  const queries = [registrations, meals, guests, payments, users, settings];
-  const loading = queries.some(q => q.isLoading);
-  const error = queries.find(q => q.error)?.error;
-  const value = (key: string) => settings.data?.find(s => s.settingKey === key)?.settingValue;
+  const { isMockMode } = useAuth();
+  const board = useQuery({ queryKey: ['management', 'payments', 'monthly-board', month, isMockMode],
+    queryFn: () => paymentService.getMonthlyBoard(month, isMockMode), refetchInterval: 60000 });
+  const loading = board.isLoading;
+  const error = board.error;
+  const value = (key: string) => board.data?.settings.find(s => s.settingKey === key)?.settingValue;
   const price = value('meal_price') === undefined ? NaN : Number(value('meal_price'));
   const guestPrice = value('guest_meal_price') === undefined ? NaN : Number(value('guest_meal_price'));
   const pricesReady = [price, guestPrice].every(p => Number.isFinite(p) && p >= 0);
   const ready = !loading && !error && pricesReady;
-  const summary = ready ? buildMonthlyCollections(month, users.data || [], registrations.data || [], meals.data || [],
-    payments.data || [], price, guestPrice, guests.data || []) : null;
+  const summary = ready ? buildMonthlyCollections(month, board.data?.users || [], board.data?.registrations || [], board.data?.meals || [],
+    board.data?.payments || [], price, guestPrice, board.data?.guests || []) : null;
   const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
   const rows = summary?.rows.filter(row => normalize(`${row.name} ${row.username}`).includes(normalize(search.trim().replace(/^@/, '')))) || [];
-  const refresh = async () => { await Promise.all(queries.map(q => q.refetch())); };
+  const refresh = async () => { await board.refetch(); };
   return <FlatList
     data={rows} keyExtractor={item => String(item.userId)}
-    contentContainerStyle={styles.content} onRefresh={() => { void refresh(); }} refreshing={queries.some(q => q.isRefetching)}
+    contentContainerStyle={styles.content} onRefresh={() => { void refresh(); }} refreshing={board.isRefetching}
     ListHeaderComponent={<View style={styles.header}>
       {header}
       <View style={styles.monthRow}>

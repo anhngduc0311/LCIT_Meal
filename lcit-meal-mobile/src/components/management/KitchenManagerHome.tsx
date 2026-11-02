@@ -21,11 +21,17 @@ import { formatDisplayDate, getFullDayOfWeek } from '../../utils/formatters';
 import { colors } from '../../theme/colors';
 
 const actions = [
-  { title: 'Bảng suất ăn tháng', detail: 'Theo dõi ăn và thanh toán từng cán bộ', icon: 'grid-outline', path: '/management/monthly' },
+  { title: 'Tổng quan', detail: 'Thống kê suất ăn, cơ sở và công nợ', icon: 'bar-chart-outline', path: '/management' },
+  { title: 'Suất ăn', detail: 'Bảng tháng và điều chỉnh từng ngày', icon: 'grid-outline', path: '/management/monthly' },
+  { title: 'Tiền khách', detail: 'Suất khách và tiền riêng từng cơ sở', icon: 'people-outline', path: '/management/guests' },
+  { title: 'Thanh toán', detail: 'Tự chốt cuối tháng, xác nhận đã thu', icon: 'wallet-outline', path: '/management/payments' },
+] as const;
+
+const supportingActions = [
   { title: 'Duyệt cắt suất', detail: 'Xử lý yêu cầu cắt suất của cán bộ', icon: 'checkbox-outline', path: '/management/registrations' },
   { title: 'Lịch bếp ăn', detail: 'Sắp xếp ngày phục vụ, ngày nghỉ', icon: 'calendar-outline', path: '/management/meals' },
-  { title: 'Quản lý thanh toán', detail: 'Theo dõi và đối soát tiền ăn', icon: 'wallet-outline', path: '/management/payments' },
-  { title: 'Báo cáo tổng quan', detail: 'Thống kê suất ăn và công nợ', icon: 'bar-chart-outline', path: '/management' },
+  { title: 'Danh sách cán bộ', detail: 'Tra cứu cán bộ và cơ sở làm việc', icon: 'person-outline', path: '/management/users' },
+  { title: 'Thông báo', detail: 'Lịch nghỉ bếp và thông tin cơ quan', icon: 'megaphone-outline', path: '/management/notifications' },
 ] as const;
 
 export function KitchenManagerHome() {
@@ -73,7 +79,7 @@ export function KitchenManagerHome() {
         <View style={styles.brand}><View style={styles.brandIcon}><Ionicons name="restaurant" size={21} color="white" /></View><Text style={styles.brandText}>LCIT <Text style={styles.brandLight}>MEAL</Text></Text></View>
         <View style={styles.mode}><Text style={styles.modeText}>ĐIỀU HÀNH BẾP</Text></View>
       </View>
-      <Header title={`Xin chào, ${user?.fullName?.trim().split(/\s+/).pop() || 'Quản lý'}`} subtitle="Chủ động từng suất ăn, chu toàn mỗi bữa trưa." userRole={role || 'manager'}
+      <Header title={`Xin chào, ${user?.fullName?.trim() === 'Quản lý' ? 'Quản lý' : user?.fullName?.trim().split(/\s+/).pop() || 'Quản lý'}`} subtitle="Chủ động từng suất ăn, chu toàn mỗi bữa trưa." userRole={role || 'manager'}
         rightAction={<TouchableOpacity accessibilityRole="button" accessibilityLabel="Làm mới dữ liệu bếp" disabled={refreshing} onPress={() => { void refresh(); }} style={styles.refresh}><Ionicons name="refresh-outline" size={22} color={colors.primary} /></TouchableOpacity>} />
 
       <View style={styles.dateRow}>
@@ -99,8 +105,10 @@ export function KitchenManagerHome() {
         <View style={styles.pendingCopy}><Text style={styles.pendingTitle}>Yêu cầu chờ duyệt</Text><Text style={styles.detail}>{pending.isError ? 'Chưa tải được · Nhấn để xem danh sách' : pending.isLoading ? 'Đang kiểm tra yêu cầu...' : `${pendingCancellationRequests(pending.data || []).length} yêu cầu cắt suất cần xử lý · Tất cả cơ sở`}</Text></View><Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
       </Card>
 
-      <Text style={styles.sectionTitle}>Quản lý bếp ăn</Text>
-      <View style={styles.grid}>{actions.map(action => <Card key={action.path} padding="lg" style={[styles.action, compact && { flexBasis: '100%', minWidth: 0 }]} onPress={() => router.push(action.path === '/management/registrations' ? { pathname: action.path, params: { date, facility: String(facility) } } : action.path as Href)}><View style={styles.actionIcon}><Ionicons name={action.icon} size={23} color={colors.primary} /></View><Text style={styles.actionTitle}>{action.title}</Text><Text style={styles.detail}>{action.detail}</Text><Ionicons name="arrow-forward" size={19} color={colors.primary} style={styles.actionArrow} /></Card>)}</View>
+      <Text style={styles.sectionTitle}>Quản lý hằng ngày</Text>
+      <View style={styles.grid}>{actions.map(action => <Card key={action.path} padding="lg" style={[styles.action, compact && { flexBasis: '100%', minWidth: 0 }]} onPress={() => router.push(action.path as Href)}><View style={styles.actionIcon}><Ionicons name={action.icon} size={23} color={colors.primary} /></View><Text style={styles.actionTitle}>{action.title}</Text><Text style={styles.detail}>{action.detail}</Text><Ionicons name="arrow-forward" size={19} color={colors.primary} style={styles.actionArrow} /></Card>)}</View>
+      <Text style={[styles.sectionTitle, { marginTop: 24 }]}>Cán bộ & điều hành</Text>
+      <View style={styles.grid}>{supportingActions.map(action => <Card key={action.path} padding="lg" style={[styles.action, compact && { flexBasis: '100%', minWidth: 0 }]} onPress={() => router.push(action.path === '/management/registrations' ? { pathname: action.path, params: { date, facility: String(facility) } } : action.path as Href)}><View style={styles.actionIcon}><Ionicons name={action.icon} size={23} color={colors.primary} /></View><Text style={styles.actionTitle}>{action.title}</Text><Text style={styles.detail}>{action.detail}</Text><Ionicons name="arrow-forward" size={19} color={colors.primary} style={styles.actionArrow} /></Card>)}</View>
       <Text style={styles.footnote}>Kéo xuống để cập nhật dữ liệu bếp ăn.</Text>
       {pickerOpen && <DatePickerModal visible mode="single" initialDate={date} title="Chọn ngày điều hành bếp" onSelectSingle={setDate} onClose={() => setPickerOpen(false)} />}
     </ScreenContainer>

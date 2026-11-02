@@ -3,6 +3,18 @@
  * Khớp với backend Payment.js và schema database
  */
 
+import type { Meal, MealGuestCount, MealRegistration } from './meals';
+import type { User } from './auth';
+
+export interface MonthlyCollectionBoard {
+  users: Pick<User, 'id' | 'fullName' | 'username'>[];
+  registrations: MealRegistration[];
+  meals: Meal[];
+  guests: MealGuestCount[];
+  payments: Payment[];
+  settings: { settingKey: string; settingValue: string }[];
+}
+
 export type PaymentStatus = 'unpaid' | 'paid' | 'overdue';
 
 export interface Payment {

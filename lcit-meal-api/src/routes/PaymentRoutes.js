@@ -2,32 +2,34 @@ const express = require("express");
 
 const ROLE = require("../constants/Role");
 
-// Xem toàn bộ thanh toán: admin + manager.
+// Xem/đối soát thanh toán: admin + manager + kitchen.
 // Xem lịch sử thanh toán của chính mình: mọi user đã đăng nhập.
-// Tạo/sửa/xóa/xác nhận đã thanh toán: admin + manager.
+// Xác nhận đã thanh toán: admin + manager + kitchen.
+// Tạo/sửa: admin + manager; xóa: admin.
 const paymentRoutes = (paymentController, authMiddleware, authorize) => {
   const router = express.Router();
 
   router.use(authMiddleware);
+  router.get('/monthly-board', authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN), paymentController.monthlyBoard);
 
   // GET /api/payments
   router.get(
     "/",
-    authorize(ROLE.ADMIN, ROLE.MANAGER),
+    authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN),
     paymentController.list,
   );
 
   // GET /api/payments/filter?userId&status&from&to
   router.get(
     "/filter",
-    authorize(ROLE.ADMIN, ROLE.MANAGER),
+    authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN),
     paymentController.filter,
   );
 
   // GET /api/payments/export?userId&status&from&to - xuất Excel (đặt trước "/:id")
   router.get(
     "/export",
-    authorize(ROLE.ADMIN, ROLE.MANAGER),
+    authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN),
     paymentController.export,
   );
 
@@ -38,7 +40,7 @@ const paymentRoutes = (paymentController, authMiddleware, authorize) => {
   // GET /api/payments/:id - chỉ admin/manager xem theo id bất kỳ (nhân viên tự xem qua /me)
   router.get(
     "/:id",
-    authorize(ROLE.ADMIN, ROLE.MANAGER),
+    authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN),
     paymentController.get,
   );
 
@@ -55,7 +57,7 @@ const paymentRoutes = (paymentController, authMiddleware, authorize) => {
   // PATCH /api/payments/:id/mark-paid - xác nhận đã thanh toán
   router.patch(
     "/:id/mark-paid",
-    authorize(ROLE.ADMIN, ROLE.MANAGER),
+    authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN),
     paymentController.markPaid,
   );
 

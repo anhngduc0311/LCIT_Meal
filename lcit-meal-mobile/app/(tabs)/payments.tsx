@@ -52,7 +52,7 @@ import { shadows } from '../../src/theme/shadows';
 
 export default function PaymentsScreen() {
   const { role } = useAuth();
-  return role === 'manager' ? <ManagementPaymentsScreen /> : <PersonalPaymentsScreen />;
+  return role === 'manager' || role === 'kitchen' ? <ManagementPaymentsScreen /> : <PersonalPaymentsScreen />;
 }
 
 function PersonalPaymentsScreen() {

@@ -9,7 +9,7 @@ import {
   View,
   useWindowDimensions,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useQueryClient } from '@tanstack/react-query';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
@@ -72,13 +72,18 @@ function MonthlyBoard() {
   const queryClient = useQueryClient();
   const { isMockMode } = useAuth();
   const { today } = useCancellationDeadline();
-  const [month, setMonth] = useState(today.slice(0, 7));
-  const [facility, setFacility] = useState<FacilityFilter>(1);
+  const params = useLocalSearchParams<{ date?: string; facility?: string }>();
+  let initialDate = today;
+  try {
+    if (typeof params.date === 'string' && monthRange(params.date.slice(0, 7)).dates.includes(params.date)) initialDate = params.date;
+  } catch { /* Invalid links open today's board. */ }
+  const [month, setMonth] = useState(initialDate.slice(0, 7));
+  const [facility, setFacility] = useState<FacilityFilter>(params.facility === '2' ? 2 : 1);
   const [search, setSearch] = useState('');
   const [viewMode, setViewMode] = useState<ViewMode>('day');
   const [personFilter, setPersonFilter] = useState<PersonFilterType>('all');
   const [expandedStaffIds, setExpandedStaffIds] = useState<Set<number>>(new Set());
-  const [selectedDate, setSelectedDate] = useState<string>(today.slice(0, 7) === month ? today : `${month}-01`);
+  const [selectedDate, setSelectedDate] = useState<string>(initialDate);
   const [daySubFilter, setDaySubFilter] = useState<'all' | 'eating' | 'not_eating'>('all');
 
   const [monthOpen, setMonthOpen] = useState(false);
