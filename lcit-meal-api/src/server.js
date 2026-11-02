@@ -3,6 +3,7 @@ const env = require("./config/env");
 const autoScheduleJob = require("./jobs/autoScheduleJob");
 const paymentReminderJob = require("./jobs/paymentReminderJob");
 const mealCompletionJob = require("./jobs/mealCompletionJob");
+const monthlyBillingJob = require('./jobs/monthlyBillingJob');
 const SystemSettingRepository = require("./repos/SystemSettingRepository");
 const MealScheduleConfigRepository = require("./repos/MealScheduleConfigRepository");
 
@@ -19,4 +20,5 @@ app.listen(env.port, env.host, async () => {
   autoScheduleJob.start();
   paymentReminderJob.start();
   mealCompletionJob.start();
+  monthlyBillingJob.start();
 });

@@ -18,6 +18,7 @@ export function useManagementPayments(params: PaymentFilterParams = {}) {
   return useQuery({
     queryKey: ['management', 'payments', params, isMockMode],
     queryFn: () => paymentService.filterPayments(params, isMockMode),
+    refetchInterval: 60000,
   });
 }
 

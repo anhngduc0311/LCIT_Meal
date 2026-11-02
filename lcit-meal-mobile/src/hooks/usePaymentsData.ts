@@ -18,6 +18,7 @@ export function useMyPayments() {
   return useQuery<Payment[], Error>({
     queryKey: PAYMENT_QUERY_KEYS.myPayments(useMockData),
     queryFn: () => paymentService.getMyPayments(useMockData),
+    refetchInterval: 60000,
   });
 }
 

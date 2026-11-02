@@ -11,6 +11,7 @@ class PaymentService {
   }
 
   async list() {
+    await this.syncMonthlyPayments();
     return this.paymentRepository.list();
   }
 
@@ -25,10 +26,12 @@ class PaymentService {
   }
 
   async listByUser(userId) {
+    await this.syncMonthlyPayments(userId);
     return this.paymentRepository.listByUser(userId);
   }
 
   async getMealLedger(userId) {
+    await this.syncMonthlyPayments(userId);
     const [days, payments] = await Promise.all([
       this.paymentRepository.getMealLedgerDays(userId),
       this.paymentRepository.listByUser(userId),
@@ -38,7 +41,13 @@ class PaymentService {
   }
 
   async filter(userId, status, fromDate, toDate) {
+    await this.syncMonthlyPayments(userId);
     return this.paymentRepository.filter(userId, status, fromDate, toDate);
+  }
+
+  async syncMonthlyPayments(userId, now = new Date()) {
+    const { date, time } = require('../ultis/monthlyBilling').vietnamClock(now);
+    return this.paymentRepository.generateMonthlyPayments(date, time, userId);
   }
 
   // Tạo hóa đơn thanh toán cho 1 nhân viên (thường do quản lý/admin lập cuối kỳ)

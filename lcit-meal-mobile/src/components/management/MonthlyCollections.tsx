@@ -9,7 +9,6 @@ import { useSystemSettings } from '../../hooks/useManagementSettings';
 import { buildMonthlyCollections } from '../../utils/monthlyCollections';
 import { monthRange, shiftMonth } from '../../utils/monthlyMeals';
 import { formatBusinessDate, formatCurrency, formatDisplayDate } from '../../utils/formatters';
-import { Button } from '../common/Button';
 import { Card } from '../common/Card';
 import { Input } from '../common/Input';
 import { ErrorState } from '../states/ErrorState';
@@ -17,9 +16,8 @@ import { EmptyState } from '../states/EmptyState';
 import { LoadingState } from '../states/LoadingState';
 import { colors } from '../../theme/colors';
 
-export function MonthlyCollections({ header, onPrepareInvoice }: {
+export function MonthlyCollections({ header }: {
   header: React.ReactNode;
-  onPrepareInvoice: (userId: number, date: string, amount: number) => void;
 }) {
   const [month, setMonth] = useState(() => formatBusinessDate(new Date()).slice(0, 7));
   const [search, setSearch] = useState('');
@@ -58,7 +56,7 @@ export function MonthlyCollections({ header, onPrepareInvoice }: {
         </TouchableOpacity>
       </View>
       <Text style={styles.hint}>Dự kiến cuối tháng theo suất đã đăng ký, gồm các ngày sắp tới. Suất đã cắt và ngày bếp nghỉ không tính tiền.</Text>
-      <Text style={styles.hint}>Hạn thu: {formatDisplayDate(range.to)} · Số tiền cập nhật khi điều chỉnh suất ăn.</Text>
+      <Text style={styles.hint}>Tự động chốt ngày {formatDisplayDate(range.to)}, sau giờ hoàn thành bữa ăn. Không cần tạo khoản thu.</Text>
       {loading ? <LoadingState /> : error || !pricesReady ? <ErrorState
         message={error instanceof Error ? error.message : 'Chưa cấu hình đủ đơn giá cán bộ và khách.'} onRetry={() => { void refresh(); }} /> : summary && <>
         <Card padding="md">
@@ -90,9 +88,8 @@ export function MonthlyCollections({ header, onPrepareInvoice }: {
       <View style={styles.line}><Text style={styles.label}>Đã thu</Text><Text style={styles.value}>{formatCurrency(item.paidAmount)}</Text></View>
       <View style={styles.line}><Text style={styles.title}>Còn cần thu</Text><Text style={styles.amount}>{formatCurrency(item.remainingAmount)}</Text></View>
       {item.creditAmount > 0 && <Text style={styles.hint}>Đã đóng dư: {formatCurrency(item.creditAmount)}</Text>}
-      {item.invoices.length ? <Text style={styles.hint}>Đã lập {item.invoices.length} khoản thu · xem tại tab Khoản thu.</Text>
-        : <Button title="Lập khoản thu" size="sm" variant="outline"
-          onPress={() => onPrepareInvoice(item.userId, range.to, item.totalAmount)} />}
+      <Text style={styles.hint}>{item.invoices.length ? 'Đã có kỳ thanh toán · xem tại tab Thanh toán.'
+        : 'Đang cộng dồn · tự động hiện kỳ thanh toán vào cuối tháng.'}</Text>
     </Card>}
   />;
 }

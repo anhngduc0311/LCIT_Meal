@@ -34,12 +34,10 @@ import { EmptyState } from '../../src/components/states/EmptyState';
 import { useAuth } from '../../src/providers/AuthProvider';
 import {
   useManagementPayments,
-  useCreatePayment,
   useUpdatePayment,
   useMarkPaid,
   useDeletePayment,
 } from '../../src/hooks/useManagementPayments';
-import { useUsersList } from '../../src/hooks/useManagementUsers';
 import { exportService } from '../../src/services/exportService';
 import { formatCurrency, formatBusinessDateDisplay } from '../../src/utils/formatters';
 import { colors } from '../../src/theme/colors';
@@ -48,8 +46,6 @@ import { typography } from '../../src/theme/typography';
 import { radius } from '../../src/theme/radius';
 import { Payment, PaymentStatus } from '../../src/types';
 import { MonthlyCollections } from '../../src/components/management/MonthlyCollections';
-import { monthRange } from '../../src/utils/monthlyMeals';
-import { formatBusinessDate } from '../../src/utils/formatters';
 
 export default function ManagementPaymentsScreen() {
   const router = useRouter();
@@ -62,7 +58,6 @@ export default function ManagementPaymentsScreen() {
   const [statusFilter, setStatusFilter] = useState<string>('all');
 
   // Modals state
-  const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isMarkPaidOpen, setIsMarkPaidOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
@@ -70,12 +65,9 @@ export default function ManagementPaymentsScreen() {
   const [isExporting, setIsExporting] = useState(false);
 
   // Form states
-  const [formUserId, setFormUserId] = useState<number>(0);
   const [formPaymentDate, setFormPaymentDate] = useState('');
   const [formAmount, setFormAmount] = useState('');
   const [formStatus, setFormStatus] = useState<PaymentStatus>('unpaid');
-  const [userSearchQuery, setUserSearchQuery] = useState('');
-  const [isUserDropdownOpen, setIsUserDropdownOpen] = useState(false);
 
   // Mark-paid form
   const [markPaidAmount, setMarkPaidAmount] = useState('');
@@ -84,9 +76,7 @@ export default function ManagementPaymentsScreen() {
   const hasAccess = role === 'admin' || role === 'manager';
 
   const { data: payments = [], isLoading, refetch } = useManagementPayments();
-  const { data: users = [] } = useUsersList();
 
-  const createMutation = useCreatePayment();
   const updateMutation = useUpdatePayment();
   const markPaidMutation = useMarkPaid();
   const deleteMutation = useDeletePayment();
@@ -126,20 +116,6 @@ export default function ManagementPaymentsScreen() {
     return matchStatus && matchQuery;
   });
 
-  const selectableUsers = users.filter((u) => {
-    if (!userSearchQuery.trim()) return true;
-    const q = normalizeSearch(userSearchQuery);
-    const cleanQ = q.replace(/^[@#]/, '').replace(/^cb/, '').trim();
-    const fullName = normalizeSearch(u.fullName || '');
-    const username = normalizeSearch(u.username || '');
-    if (fullName.includes(q) || fullName.includes(cleanQ)) return true;
-    if (username.includes(q) || username.includes(cleanQ)) return true;
-    const words = cleanQ.split(/\s+/).filter(Boolean);
-    if (words.length > 1 && words.every((w) => fullName.includes(w) || username.includes(w))) return true;
-    if (/^\d+$/.test(cleanQ) && u.id === Number(cleanQ)) return true;
-    return false;
-  });
-
   // Calculate totals
   const totalUnpaid = payments
     .filter((p) => p.status === 'unpaid' || p.status === 'overdue')
@@ -168,23 +144,6 @@ export default function ManagementPaymentsScreen() {
     } finally {
       setIsExporting(false);
     }
-  };
-
-  const handleCreatePayment = async () => {
-    if (!formUserId || !formPaymentDate.trim() || !formAmount.trim()) {
-      Alert.alert('Thiếu thông tin', 'Vui lòng chọn Cán bộ, nhập kỳ thanh toán và số tiền.');
-      return;
-    }
-    await createMutation.mutateAsync({
-      userId: formUserId,
-      paymentDate: formPaymentDate.trim(),
-      amount: parseInt(formAmount, 10) || 0,
-      status: formStatus,
-    });
-    setIsCreateOpen(false);
-    setFormUserId(0);
-    setFormPaymentDate('');
-    setFormAmount('');
   };
 
   const handleUpdatePayment = async () => {
@@ -326,28 +285,15 @@ export default function ManagementPaymentsScreen() {
     );
   }
 
-  const selectedFormUser = users.find((u) => u.id === formUserId);
-
-  const handleOpenCreateModal = () => {
-    if (users.length > 0) setFormUserId(users[0].id);
-    const currentMonth = formatBusinessDate(new Date()).slice(0, 7);
-    setFormPaymentDate(monthRange(currentMonth).to);
-    setFormAmount('');
-    setFormStatus('unpaid');
-    setUserSearchQuery('');
-    setIsUserDropdownOpen(false);
-    setIsCreateOpen(true);
-  };
-
   const viewSwitcher = <View style={{ flexDirection: 'row', gap: 8, marginBottom: 12 }}>
     <Button title="Cuối tháng" size="sm" variant={monthlyView ? 'primary' : 'secondary'} style={{ flex: 1 }} onPress={() => setMonthlyView(true)} />
-    <Button title="Khoản thu" size="sm" variant={!monthlyView ? 'primary' : 'secondary'} style={{ flex: 1 }} onPress={() => setMonthlyView(false)} />
+    <Button title="Thanh toán" size="sm" variant={!monthlyView ? 'primary' : 'secondary'} style={{ flex: 1 }} onPress={() => setMonthlyView(false)} />
   </View>;
 
   const pageHeader = <>
       <Header
         title="Quản lý Thu Tiền Ăn"
-        subtitle={monthlyView ? 'Tiền cuối tháng từng người · tiền khách tách riêng' : 'Khoản thu đã lập, xác nhận đóng và xuất báo cáo'}
+        subtitle={monthlyView ? 'Tiền cuối tháng từng người · tiền khách tách riêng' : 'Tự động chốt cuối tháng, xác nhận đóng và xuất báo cáo'}
         showBack
         onBack={() => router.back()}
         userRole={role || undefined}
@@ -434,18 +380,15 @@ export default function ManagementPaymentsScreen() {
 
   return (
     <ScreenContainer scrollable={false} backgroundColor={colors.background}>
-      {monthlyView ? <MonthlyCollections header={pageHeader} onPrepareInvoice={(userId, date, amount) => {
-        setFormUserId(userId); setFormPaymentDate(date); setFormAmount(String(amount));
-        setFormStatus('unpaid'); setUserSearchQuery(''); setIsUserDropdownOpen(false); setIsCreateOpen(true);
-      }} /> : <FlatList
+      {monthlyView ? <MonthlyCollections header={pageHeader} /> : <FlatList
         data={filteredPayments}
         keyExtractor={(item) => String(item.id)}
         renderItem={renderPaymentItem}
         ListHeaderComponent={ListHeader}
         ListEmptyComponent={
           <EmptyState
-            title="Không có khoản thanh toán nào"
-            description="Thử thay đổi bộ lọc hoặc bấm nút tạo khoản thu mới ở góc dưới bên phải."
+            title="Chưa có kỳ thanh toán"
+            description="Kỳ thanh toán sẽ tự xuất hiện sau giờ hoàn thành bữa ăn của ngày cuối tháng, không cần tạo khoản thu."
           />
         }
         showsVerticalScrollIndicator={false}
@@ -456,193 +399,6 @@ export default function ManagementPaymentsScreen() {
         maxToRenderPerBatch={10}
         windowSize={5}
       />}
-
-      {/* Nút Tạo Khoản Thu ở góc dưới bên phải (Floating Action Button) */}
-      {!monthlyView && <TouchableOpacity
-        style={styles.fab}
-        onPress={handleOpenCreateModal}
-        activeOpacity={0.85}
-        accessibilityLabel="Tạo khoản thanh toán mới"
-        accessibilityRole="button"
-      >
-        <Ionicons name="add" size={28} color={colors.textInverse} />
-      </TouchableOpacity>}
-
-      {/* Modal Tạo Khoản Thu - Tích hợp DatePickerInput & Searchable Dropdown */}
-      <Modal visible={isCreateOpen} transparent animationType="slide" onRequestClose={() => setIsCreateOpen(false)}>
-        <ModalBackdrop style={styles.modalOverlay}>
-          <View style={styles.modalDialog}>
-            <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Tạo khoản thanh toán mới</Text>
-              <TouchableOpacity
-                onPress={() => {
-                  setIsCreateOpen(false);
-                  setIsUserDropdownOpen(false);
-                }}
-                activeOpacity={0.7}
-              >
-                <Ionicons name="close" size={22} color={colors.textSecondary} />
-              </TouchableOpacity>
-            </View>
-
-            <ScrollView
-              showsVerticalScrollIndicator={false}
-              keyboardShouldPersistTaps="handled"
-              nestedScrollEnabled
-            >
-              <Text style={styles.formSectionLabel}>1. Chọn Cán bộ:</Text>
-              <View style={styles.dropdownContainer}>
-                <TouchableOpacity
-                  style={[styles.dropdownTrigger, isUserDropdownOpen && styles.dropdownTriggerActive]}
-                  onPress={() => setIsUserDropdownOpen((prev) => !prev)}
-                  activeOpacity={0.8}
-                  accessibilityRole="button"
-                  accessibilityLabel="Chọn cán bộ"
-                >
-                  <View style={styles.dropdownTriggerContent}>
-                    <View style={styles.dropdownAvatar}>
-                      <Ionicons name="person" size={16} color={colors.primary} />
-                    </View>
-                    <View style={styles.dropdownTextCol}>
-                      {selectedFormUser ? (
-                        <>
-                          <Text style={styles.dropdownSelectedName} numberOfLines={1}>
-                            {selectedFormUser.fullName}
-                          </Text>
-                          <Text style={styles.dropdownSelectedSub} numberOfLines={1}>
-                            @{selectedFormUser.username}
-                          </Text>
-                        </>
-                      ) : (
-                        <Text style={styles.dropdownPlaceholder}>
-                          -- Chọn cán bộ cần tạo khoản thu --
-                        </Text>
-                      )}
-                    </View>
-                  </View>
-                  <Ionicons
-                    name={isUserDropdownOpen ? 'chevron-up' : 'chevron-down'}
-                    size={18}
-                    color={colors.textSecondary}
-                  />
-                </TouchableOpacity>
-
-                {isUserDropdownOpen && (
-                  <View style={styles.dropdownListWrapper}>
-                    <Input
-                      value={userSearchQuery}
-                      onChangeText={setUserSearchQuery}
-                      placeholder="Tìm theo tên hoặc tài khoản..."
-                      autoFocus
-                      containerStyle={styles.dropdownSearchInput}
-                      leftIcon={<Ionicons name="search" size={16} color={colors.textMuted} />}
-                      rightIcon={
-                        userSearchQuery ? (
-                          <TouchableOpacity onPress={() => setUserSearchQuery('')}>
-                            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
-                          </TouchableOpacity>
-                        ) : undefined
-                      }
-                    />
-
-                    <ScrollView
-                      style={styles.dropdownListScroll}
-                      nestedScrollEnabled
-                      keyboardShouldPersistTaps="handled"
-                    >
-                      {selectableUsers.length === 0 ? (
-                        <Text style={styles.dropdownEmptyText}>
-                          Không tìm thấy cán bộ nào
-                        </Text>
-                      ) : (
-                        selectableUsers.map((u) => {
-                          const isSelected = formUserId === u.id;
-                          return (
-                            <TouchableOpacity
-                              key={u.id}
-                              style={[styles.dropdownItem, isSelected && styles.dropdownItemSelected]}
-                              onPress={() => {
-                                setFormUserId(u.id);
-                                setIsUserDropdownOpen(false);
-                                setUserSearchQuery('');
-                              }}
-                              activeOpacity={0.7}
-                            >
-                              <View
-                                style={[
-                                  styles.dropdownItemAvatar,
-                                  isSelected && styles.dropdownItemAvatarSelected,
-                                ]}
-                              >
-                                <Ionicons
-                                  name="person"
-                                  size={14}
-                                  color={isSelected ? colors.surface : colors.textSecondary}
-                                />
-                              </View>
-                              <View style={styles.dropdownItemInfo}>
-                                <Text
-                                  style={[
-                                    styles.dropdownItemName,
-                                    isSelected && styles.dropdownItemNameSelected,
-                                  ]}
-                                  numberOfLines={1}
-                                >
-                                  {u.fullName}
-                                </Text>
-                                <Text style={styles.dropdownItemSub} numberOfLines={1}>
-                                  @{u.username}
-                                </Text>
-                              </View>
-                              {isSelected && (
-                                <Ionicons name="checkmark-circle" size={18} color={colors.primary} />
-                              )}
-                            </TouchableOpacity>
-                          );
-                        })
-                      )}
-                    </ScrollView>
-                  </View>
-                )}
-              </View>
-
-              <DatePickerInput
-                label="Kỳ thanh toán"
-                value={formPaymentDate}
-                onChangeDate={setFormPaymentDate}
-                placeholder="Chọn ngày thanh toán..."
-              />
-
-              <Input
-                label="Số tiền (VND)"
-                value={formAmount}
-                onChangeText={setFormAmount}
-                placeholder="VD: 660000"
-                keyboardType="numeric"
-              />
-
-              <View style={styles.modalActionRow}>
-                <Button
-                  title="Hủy"
-                  variant="secondary"
-                  onPress={() => {
-                    setIsCreateOpen(false);
-                    setIsUserDropdownOpen(false);
-                  }}
-                  style={styles.modalBtnHalf}
-                />
-                <Button
-                  title="Tạo khoản thu"
-                  variant="primary"
-                  onPress={handleCreatePayment}
-                  loading={createMutation.isPending}
-                  style={styles.modalBtnHalf}
-                />
-              </View>
-            </ScrollView>
-          </View>
-        </ModalBackdrop>
-      </Modal>
 
       {/* Modal Sửa Khoản Thu - Tích hợp DatePickerInput */}
       <Modal visible={isEditOpen} transparent animationType="slide" onRequestClose={() => setIsEditOpen(false)}>

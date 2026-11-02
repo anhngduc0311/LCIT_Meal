@@ -84,7 +84,12 @@ async function main() {
   assert.equal(ledger.totalUnpaidAmount, 60000);
   assert.equal(ledger.months.find(m => m.month === '2001-01').days[0].unpaidAmount, 60000);
   assert.equal((await req('manager', '/payments/me/ledger')).totalUnpaidAmount, 0);
-  const bill = await req('manager', '/payments', 'POST', { userId: users.employee, paymentDate: '2001-01-31', amount: 60000 }, 201);
+  // Opening personal payments automatically materializes a closed month's bill.
+  const automatic = await req('employee', '/payments/me');
+  const bill = automatic.find(p => p.paymentDate === '2001-01-31');
+  assert.ok(bill);
+  assert.equal(bill.amount, 60000);
+  assert.equal(automatic.filter(p => p.paymentDate === '2001-01-31').length, 1); checks++;
   assert.equal((await req('employee', '/payments/me/ledger')).totalUnpaidAmount, 60000);
   await req('manager', `/payments/${bill.id}/mark-paid`, 'PATCH', { paidAmount: 60000 });
   assert.equal((await req('employee', '/payments/me/ledger')).totalUnpaidAmount, 0);
@@ -150,6 +155,20 @@ async function main() {
   const [[setting]] = await pool.query("SELECT setting_value FROM system_setting WHERE setting_key='meal_price'");
   assert.equal(setting.setting_value, '30000'); checks++;
   assert.equal((await fetch(`${base}/healthz`)).status, 200); checks++;
+  const billingRepo = new (require('../../src/repos/PaymentRepository'))();
+  const [monthEndMeal] = await pool.query("INSERT INTO meal(meal_date,status) VALUES(?,'active')", ['2097-11-30']);
+  await pool.query("INSERT INTO meal_registration(user_id,meal_id,guest_count,status) VALUES(?,?,2,'confirmed')", [users.employee, monthEndMeal.insertId]);
+  await req('manager', `/meals/${monthEndMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 10 });
+  await billingRepo.generateMonthlyPayments('2097-11-30', '11:59', users.employee);
+  const [notDue] = await pool.query('SELECT id FROM payment WHERE user_id=? AND payment_date=?', [users.employee, '2097-11-30']);
+  assert.equal(notDue.length, 0); checks++;
+  const generated = await Promise.all([1, 2].map(() => billingRepo.generateMonthlyPayments('2097-11-30', '12:00', users.employee)));
+  assert.equal(generated.reduce((sum, item) => sum + item.created, 0), 1); checks++;
+  const [monthBills] = await pool.query('SELECT amount,is_paid FROM payment WHERE user_id=? AND payment_date=?', [users.employee, '2097-11-30']);
+  assert.equal(monthBills.length, 1);
+  assert.equal(Number(monthBills[0].amount), 90000); // 1 staff + 2 linked guests; 10 facility guests remain separate.
+  assert.equal(Number(monthBills[0].is_paid), 0); checks++;
+  assert.equal((await billingRepo.generateMonthlyPayments('2097-12-01', '08:00', users.employee)).created, 0); checks++;
   await req('admin','/auth/logout','POST',{});
   await req('admin','/users','GET',undefined,401);
   console.log(`PASS ${checks} PostgreSQL checks (isolated schema).`);

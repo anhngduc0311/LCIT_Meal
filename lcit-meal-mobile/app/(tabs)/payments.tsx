@@ -280,7 +280,7 @@ function PersonalPaymentsScreen() {
       </View>
 
       <Text style={styles.sectionTitle}>
-        Lịch sử các kỳ thu ({filteredPayments.length})
+        Các kỳ thanh toán ({filteredPayments.length})
       </Text>
     </>
   );
@@ -299,7 +299,7 @@ function PersonalPaymentsScreen() {
           <EmptyState
             iconName="wallet-outline"
             title="Chưa có hóa đơn trong danh sách này"
-            description="Tiền ăn theo ngày vẫn được cộng dồn ở bảng phía trên. Hóa đơn được lập khi chốt tiền cuối tháng."
+            description="Tiền ăn vẫn cộng dồn hằng ngày ở bảng trên. Đến cuối tháng, hệ thống tự chốt và hiển thị kỳ thanh toán, không cần tạo khoản thu."
           />
         }
         contentContainerStyle={styles.listContent}
