@@ -20,6 +20,18 @@ const PAYMENT_JOIN_USER = `
 `;
 
 class PaymentRepository {
+  async getMealLedgerDays(userId) {
+    const [settings] = await pool.query("SELECT setting_key, setting_value FROM system_setting WHERE setting_key IN ('meal_price','guest_meal_price')");
+    const value = key => Number(settings.find(s => s.setting_key === key)?.setting_value);
+    const price = value('meal_price'), guestPrice = value('guest_meal_price');
+    if (![price, guestPrice].every(n => Number.isFinite(n) && n >= 0)) throw new Error('Chưa cấu hình đơn giá suất ăn');
+    const [rows] = await pool.query(`SELECT m.meal_date AS date, COUNT(*) AS staff, SUM(r.guest_count) AS guests
+      FROM meal_registration r JOIN meal m ON m.id=r.meal_id
+      WHERE r.user_id=? AND r.status='completed' AND m.is_cancelled=0 AND m.status='active' AND m.meal_date<=CURDATE()
+      GROUP BY m.meal_date ORDER BY m.meal_date`, [userId]);
+    return rows.map(row => ({ ...row, amount: Number(row.staff) * price + Number(row.guests) * guestPrice }));
+  }
+
   async list() {
     const [rows] = await pool.query(`
       SELECT ${PAYMENT_SELECT_FIELDS}

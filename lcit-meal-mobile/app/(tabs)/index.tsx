@@ -31,6 +31,7 @@ import {
   useCancelRegistrationMutation,
 } from '../../src/hooks/useMealsData';
 import { useMyPaymentSummary } from '../../src/hooks/usePaymentsData';
+import { DailyMealLedger } from '../../src/components/meals/DailyMealLedger';
 import {
   formatCurrency,
   formatDisplayDate,
@@ -223,9 +224,9 @@ function PersonalHomeScreen() {
             {loadingPayments ? <View style={styles.paymentLoading}><ActivityIndicator color={colors.primary} /><Text style={styles.body}>Đang tải thanh toán…</Text></View>
             : paymentsError ? <Text style={styles.paymentError}>Chưa tải được số dư. Mở thanh toán để kiểm tra lại.</Text>
             : <><Text style={styles.paymentAmount}>{formatCurrency(totalUnpaidAmount)}</Text>
-            <View style={[styles.paymentStatus, unpaidCount > 0 && styles.paymentStatusUnpaid]}><Ionicons name={unpaidCount > 0 ? 'time-outline' : 'checkmark-circle-outline'} size={16} color={unpaidCount > 0 ? '#9A3412' : colors.primary} /><Text style={[styles.statusText, unpaidCount > 0 && styles.statusTextUnpaid]}>{unpaidCount > 0 ? `${unpaidCount} kỳ cần thanh toán` : 'Đã hoàn tất thanh toán'}</Text></View></>}
+            <View style={[styles.paymentStatus, unpaidCount > 0 && styles.paymentStatusUnpaid]}><Ionicons name={unpaidCount > 0 ? 'time-outline' : 'checkmark-circle-outline'} size={16} color={unpaidCount > 0 ? '#9A3412' : colors.primary} /><Text style={[styles.statusText, unpaidCount > 0 && styles.statusTextUnpaid]}>{unpaidCount > 0 ? `${unpaidCount} tháng còn nợ · Thu cuối tháng` : 'Chưa có tiền ăn còn nợ'}</Text></View>
+            {paymentSummary && <DailyMealLedger ledger={paymentSummary} compact />}</>}
             <View style={styles.divider} />
-            <Text style={[styles.body, {marginBottom: 20}]}>Theo dõi tiền ăn và chuyển khoản thuận tiện bằng mã QR.</Text>
             <Button title="Xem thanh toán" onPress={() => router.push('/(tabs)/payments')} fullWidth rightIcon={<Ionicons name="arrow-forward" size={18} color="white" />} />
           </Card>
           <View style={styles.reminder}><Ionicons name="information-circle-outline" size={22} color={colors.primary} /><View style={styles.reminderCopy}><Text style={styles.actionTitle}>Có kế hoạch nghỉ?</Text><Text style={styles.body}>Báo cắt suất trước 08:00 để nhà bếp chuẩn bị đúng số lượng nhé.</Text></View></View>

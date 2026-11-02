@@ -14,9 +14,19 @@ import {
   MarkPaidRequest,
   PaymentFilterParams,
   PaginatedData,
+  MealLedger,
 } from '../types';
 
 export const paymentService = {
+  async getMyMealLedger(useMock = false): Promise<MealLedger> {
+    if (useMock) {
+      const payments = await this.getMyPayments(true);
+      const totalUnpaidAmount = payments.filter(p => !p.isPaid && p.status !== 'paid').reduce((sum, p) => sum + Number(p.amount), 0);
+      return { currentMonth: new Date().toISOString().slice(0, 7), months: [], totalUnpaidAmount, unpaidCount: payments.filter(p => !p.isPaid && p.status !== 'paid').length, overdueCount: 0 };
+    }
+    const result = await apiClient<Omit<MealLedger, 'overdueCount'>>('/payments/me/ledger');
+    return { ...result, overdueCount: 0 };
+  },
   /**
    * Lấy danh sách thanh toán của tôi: GET /api/payments/me
    */
@@ -33,6 +43,7 @@ export const paymentService = {
    * Tính toán tóm tắt thanh toán cá nhân từ /payments/me
    */
   async getMyPaymentSummary(useMock = false): Promise<PaymentSummary> {
+    if (!useMock) return this.getMyMealLedger(false);
     const payments = await this.getMyPayments(useMock);
 
     let totalUnpaidAmount = 0;

@@ -1,6 +1,7 @@
 const PAYMENT_STATUS = require("../constants/Payment");
 const LOG_ACTION = require("../constants/LogAction");
 const AppError = require("../ultis/AppError");
+const { buildMealLedger } = require('../ultis/mealLedger');
 
 class PaymentService {
   constructor(paymentRepository, notificationService, auditLogService) {
@@ -25,6 +26,15 @@ class PaymentService {
 
   async listByUser(userId) {
     return this.paymentRepository.listByUser(userId);
+  }
+
+  async getMealLedger(userId) {
+    const [days, payments] = await Promise.all([
+      this.paymentRepository.getMealLedgerDays(userId),
+      this.paymentRepository.listByUser(userId),
+    ]);
+    const currentMonth = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh', year: 'numeric', month: '2-digit' }).format(new Date()).slice(0, 7);
+    return buildMealLedger(days, payments, currentMonth);
   }
 
   async filter(userId, status, fromDate, toDate) {

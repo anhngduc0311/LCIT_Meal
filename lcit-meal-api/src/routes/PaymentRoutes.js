@@ -33,6 +33,7 @@ const paymentRoutes = (paymentController, authMiddleware, authorize) => {
 
   // GET /api/payments/me - lịch sử thanh toán của chính mình
   router.get("/me", authorize(...ROLE.STAFF_ROLES), paymentController.listMine);
+  router.get('/me/ledger', authorize(...ROLE.STAFF_ROLES), paymentController.mealLedgerMine);
 
   // GET /api/payments/:id - chỉ admin/manager xem theo id bất kỳ (nhân viên tự xem qua /me)
   router.get(

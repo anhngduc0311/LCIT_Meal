@@ -29,6 +29,7 @@ import { ModalCard } from '../../src/components/common/ModalCard';
 import { useResponsiveLayout } from '../../src/hooks/useResponsiveLayout';
 import { Header } from '../../src/components/common/Header';
 import { Card } from '../../src/components/common/Card';
+import { DailyMealLedger } from '../../src/components/meals/DailyMealLedger';
 import { Badge } from '../../src/components/common/Badge';
 import { Button } from '../../src/components/common/Button';
 import { EmptyState } from '../../src/components/states/EmptyState';
@@ -65,7 +66,7 @@ function PersonalPaymentsScreen() {
 
   // Queries
   const { data: payments = [], isLoading: loadingPayments, refetch: refetchPayments } = useMyPayments();
-  const { data: summary, isLoading: loadingSummary, refetch: refetchSummary } = useMyPaymentSummary();
+  const { data: summary, isLoading: loadingSummary, isError: summaryError, refetch: refetchSummary } = useMyPaymentSummary();
   const { data: scheduleConfig } = useScheduleConfig();
 
   const isRefreshing = loadingPayments || loadingSummary;
@@ -222,11 +223,11 @@ function PersonalPaymentsScreen() {
       <Card variant="elevated" padding="xl" style={styles.summaryCard}>
         <View style={styles.summaryHeader}>
           <Text style={styles.summaryTitle}>Tổng tiền cần thanh toán</Text>
-          <Badge
+          {!loadingSummary && !summaryError && <Badge
             type="payment"
             value={unpaidTotal > 0 ? 'unpaid' : 'paid'}
             size="sm"
-          />
+          />}
         </View>
 
         <Text
@@ -235,15 +236,15 @@ function PersonalPaymentsScreen() {
             unpaidTotal > 0 ? styles.amountUnpaid : styles.amountPaid,
           ]}
         >
-          {formatCurrency(unpaidTotal)}
+          {loadingSummary || summaryError ? '—' : formatCurrency(unpaidTotal)}
         </Text>
 
         <Text style={styles.summaryDesc}>
-          {unpaidTotal > 0
-            ? 'Vui lòng thanh toán chuyển khoản trước ngày đến hạn theo quy định cơ quan.'
-            : 'Tất cả các khoản tiền ăn của bạn đã được thanh toán đầy đủ.'}
+          {summaryError ? 'Chưa tải được tiền ăn. Kéo xuống để thử lại.' : 'Tiền ăn cộng dồn theo ngày, chốt và thanh toán một lần vào cuối tháng.'}
         </Text>
       </Card>
+
+      {summary && !summaryError && <Card padding="xl"><DailyMealLedger ledger={summary} /></Card>}
 
       {/* Bộ lọc trạng thái */}
       <View style={styles.filterRow}>
@@ -297,8 +298,8 @@ function PersonalPaymentsScreen() {
         ListEmptyComponent={
           <EmptyState
             iconName="wallet-outline"
-            title="Chưa có khoản thanh toán"
-            description="Bạn hiện chưa có khoản tiền ăn nào phát sinh trên hệ thống."
+            title="Chưa có hóa đơn trong danh sách này"
+            description="Tiền ăn theo ngày vẫn được cộng dồn ở bảng phía trên. Hóa đơn được lập khi chốt tiền cuối tháng."
           />
         }
         contentContainerStyle={styles.listContent}

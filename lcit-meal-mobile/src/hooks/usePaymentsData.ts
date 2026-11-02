@@ -6,7 +6,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../providers/AuthProvider';
 import { paymentService } from '../services/paymentService';
-import { Payment, PaymentSummary } from '../types';
+import { Payment, MealLedger } from '../types';
 
 export const PAYMENT_QUERY_KEYS = {
   myPayments: (useMock: boolean) => ['payments', 'me', { useMock }] as const,
@@ -23,8 +23,9 @@ export function useMyPayments() {
 
 export function useMyPaymentSummary() {
   const { useMockData } = useAuth();
-  return useQuery<PaymentSummary, Error>({
+  return useQuery<MealLedger, Error>({
     queryKey: PAYMENT_QUERY_KEYS.mySummary(useMockData),
-    queryFn: () => paymentService.getMyPaymentSummary(useMockData),
+    queryFn: () => paymentService.getMyMealLedger(useMockData),
+    refetchInterval: 60000,
   });
 }

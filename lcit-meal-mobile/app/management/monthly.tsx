@@ -191,6 +191,7 @@ function MonthlyBoard() {
         queryClient.invalidateQueries({ queryKey: ['management', 'registrations'] }),
         queryClient.invalidateQueries({ queryKey: ['registrations'] }),
         queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['payments'] }),
         queryClient.invalidateQueries({ queryKey: ['meals'] }),
       ]);
       busy.current = false;

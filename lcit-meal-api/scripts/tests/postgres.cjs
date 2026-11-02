@@ -78,6 +78,17 @@ async function main() {
   const payment = await req('manager', '/payments', 'POST', { userId: users.employee, paymentDate: date, amount: 90000 }, 201);
   assert.equal(payment.paymentDate, date);
   await req('manager', `/payments/${payment.id}/mark-paid`, 'PATCH', { paidAmount: 90000 });
+  const accrued = await req('admin', '/meal-registrations', 'POST', { userId: users.employee, mealId: oldMeal.insertId, guestCount: 1 }, 201);
+  const ledger = await req('employee', `/payments/me/ledger?userId=${users.manager}`);
+  assert.match(ledger.currentMonth, /^\d{4}-\d{2}$/);
+  assert.equal(ledger.totalUnpaidAmount, 60000);
+  assert.equal(ledger.months.find(m => m.month === '2001-01').days[0].unpaidAmount, 60000);
+  assert.equal((await req('manager', '/payments/me/ledger')).totalUnpaidAmount, 0);
+  const bill = await req('manager', '/payments', 'POST', { userId: users.employee, paymentDate: '2001-01-31', amount: 60000 }, 201);
+  assert.equal((await req('employee', '/payments/me/ledger')).totalUnpaidAmount, 60000);
+  await req('manager', `/payments/${bill.id}/mark-paid`, 'PATCH', { paidAmount: 60000 });
+  assert.equal((await req('employee', '/payments/me/ledger')).totalUnpaidAmount, 0);
+  await req('admin', `/meal-registrations/${accrued.id}/cancel`, 'PATCH', {});
   await req('employee', '/notifications/me');
   await req('employee', '/notifications/me/seen-all', 'PATCH', {});
   const dayRepo = new (require('../../src/repos/MealScheduleConfigRepository'))();

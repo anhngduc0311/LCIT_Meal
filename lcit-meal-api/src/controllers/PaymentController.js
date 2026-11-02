@@ -19,6 +19,12 @@ class PaymentController {
   };
 
   // Lịch sử thanh toán của chính người dùng đang đăng nhập
+  mealLedgerMine = async (req, res, next) => {
+    try {
+      return ApiResponse.success(res, await this.paymentService.getMealLedger(req.user.id));
+    } catch (error) { next(error); }
+  };
+
   listMine = async (req, res, next) => {
     try {
       const payments = await this.paymentService.listByUser(req.user.id);

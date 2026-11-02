@@ -32,6 +32,28 @@ export interface PaymentSummary {
   latestPaymentDate?: string;
 }
 
+export interface MealLedgerDay {
+  date: string;
+  staff: number;
+  guests: number;
+  amount: number;
+  unpaidAmount: number;
+}
+export interface MealLedgerMonth {
+  month: string;
+  days: MealLedgerDay[];
+  mealAmount: number;
+  invoicedAmount: number;
+  paidAmount: number;
+  totalAmount: number;
+  unpaidAmount: number;
+  dueDate: string;
+}
+export interface MealLedger extends PaymentSummary {
+  currentMonth: string;
+  months: MealLedgerMonth[];
+}
+
 export interface CreatePaymentRequest {
   userId: number;
   paymentDate: string; // YYYY-MM-DD
