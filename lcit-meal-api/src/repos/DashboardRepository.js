@@ -66,6 +66,26 @@ const resolvePeriodRange = (period, anchorDate) => {
 //
 // Logic các câu truy vấn tương ứng với file sql/dashboard_home_procedure.sql
 // (mục 1, 2, 3, 4, 4b, 4c, 4d) - giữ nguyên để tham khảo/đối chiếu.
+const mealRepository = new (require('./MealRepository'))();
+async function guestsForDate(date) {
+  return (await mealRepository.filterGuestCounts(date, date)).reduce((sum, item) => sum + Number(item.guestCount), 0);
+}
+async function withGuestChart(rows, start, end, monthly = false) {
+  const [guests, [settings]] = await Promise.all([
+    mealRepository.filterGuestCounts(start, end),
+    pool.query("SELECT setting_value FROM system_setting WHERE setting_key='meal_completion_time'"),
+  ]);
+  const today = getVietnamDate();
+  const time = new Intl.DateTimeFormat('en-GB', { timeZone: 'Asia/Ho_Chi_Minh', hour: '2-digit', minute: '2-digit', hour12: false }).format(new Date());
+  const completedToday = time >= (settings[0]?.setting_value || '12:00');
+  const amounts = new Map();
+  for (const guest of guests) {
+    if (guest.mealDate > today || (guest.mealDate === today && !completedToday)) continue;
+    const key = monthly ? guest.mealDate.slice(0, 7) : guest.mealDate;
+    amounts.set(key, (amounts.get(key) || 0) + Number(guest.guestCount));
+  }
+  return rows.map(row => ({ ...row, total_meal_slots: Number(row.total_meal_slots) + (amounts.get(row.meal_date) || 0) }));
+}
 class DashboardRepository {
   // 1) Suất ăn hôm nay
   async getTodayMeal(date) {
@@ -77,7 +97,7 @@ class DashboardRepository {
           m.is_cancelled,
           m.note                                                      AS cancel_note,
           COALESCE(SUM(CASE WHEN m.is_cancelled = 0
-                                  AND mr.status = 'confirmed'
+                                  AND mr.status IN ('confirmed','completed')
                              THEN 1 + mr.guest_count ELSE 0 END), 0)  AS total_meal_slots,
           (SELECT setting_value FROM system_setting
             WHERE setting_key = 'meal_price')                         AS meal_price,
@@ -90,6 +110,7 @@ class DashboardRepository {
       [today],
     );
 
+    if (rows[0]) rows[0].total_meal_slots = Number(rows[0].total_meal_slots) + await guestsForDate(today);
     return rows[0] ?? null;
   }
 
@@ -106,10 +127,12 @@ class DashboardRepository {
        WHERE m.meal_date = ?
          AND m.status = 'active'
          AND m.is_cancelled = 0
-         AND mr.status = 'confirmed'`,
+         AND mr.status IN ('confirmed','completed')`,
       [today],
     );
 
+    const guests = await guestsForDate(today);
+    if (rows[0]) { rows[0].total_guest_count = Number(rows[0].total_guest_count) + guests; rows[0].total_meal_slots = Number(rows[0].total_meal_slots) + guests; }
     return rows[0] ?? null;
   }
 
@@ -146,7 +169,7 @@ class DashboardRepository {
       [today, today],
     );
 
-    return rows;
+    return withGuestChart(rows, addDaysUTC(today, -6), today);
   }
 
   // 3b) Biểu đồ theo khoảng ngày tùy ý (dùng cho filter "tuần"/"tháng" -
@@ -181,7 +204,7 @@ class DashboardRepository {
       [startDate, endDate],
     );
 
-    return rows;
+    return withGuestChart(rows, startDate, endDate);
   }
 
   // 3c) Biểu đồ theo THÁNG cho cả 1 năm (dùng cho filter "năm") - gộp dữ
@@ -208,7 +231,7 @@ class DashboardRepository {
 
     const byMonth = new Map(rows.map((row) => [row.meal_date, row]));
 
-    return Array.from({ length: 12 }, (_, index) => {
+    const filled = Array.from({ length: 12 }, (_, index) => {
       const label = `${year}-${String(index + 1).padStart(2, "0")}`;
       return (
         byMonth.get(label) || {
@@ -219,6 +242,7 @@ class DashboardRepository {
         }
       );
     });
+    return withGuestChart(filled, `${year}-01-01`, `${year}-12-31`, true);
   }
 
   // Điểm vào chung cho filter tuần/tháng/năm ở trang chủ.
@@ -288,7 +312,7 @@ class DashboardRepository {
     const [rows] = await pool.query(
       `SELECT COUNT(*) AS pending_meal_option_count
        FROM meal_option
-       WHERE status = 'pending'`,
+        WHERE status = 'pending' AND type IN ('cancel_schedule','cancel_permanent')`,
     );
 
     return rows[0]?.pending_meal_option_count ?? 0;

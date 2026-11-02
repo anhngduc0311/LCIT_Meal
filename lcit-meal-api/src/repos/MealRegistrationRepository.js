@@ -403,14 +403,15 @@ class MealRegistrationRepository {
                 COUNT(*) AS registered_count,
                 COALESCE(SUM(guest_count), 0) AS guest_count_total
             FROM meal_registration
-            WHERE meal_id = ? AND status = 'confirmed'
+            WHERE meal_id = ? AND status IN ('confirmed','completed')
         `,
       [mealId],
     );
 
+    const [[extra]] = await pool.query("SELECT COALESCE(SUM(g.guest_count),0) AS count FROM meal_guest_count g JOIN meal m ON m.id=g.meal_id WHERE g.meal_id=? AND m.is_cancelled=0 AND m.status='active'", [mealId]);
     return {
       registeredCount: Number(rows[0].registered_count) || 0,
-      guestCountTotal: Number(rows[0].guest_count_total) || 0,
+      guestCountTotal: (Number(rows[0].guest_count_total) || 0) + Number(extra.count),
     };
   }
 }

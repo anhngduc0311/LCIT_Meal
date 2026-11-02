@@ -28,6 +28,7 @@ export interface GuestCounterProps {
   style?: ViewStyle;
   label?: string;
   helperText?: string;
+  valueDescription?: string;
 }
 
 export const GuestCounter: React.FC<GuestCounterProps> = ({
@@ -39,6 +40,7 @@ export const GuestCounter: React.FC<GuestCounterProps> = ({
   style,
   label = 'Số lượng khách ăn kèm',
   helperText = 'Tối đa 10 khách/suất. Khách ăn cùng ngày đã chọn.',
+  valueDescription,
 }) => {
   const isMin = value <= min;
   const isMax = value >= max;
@@ -90,7 +92,7 @@ export const GuestCounter: React.FC<GuestCounterProps> = ({
         <View style={styles.valueDisplay}>
           <Text style={styles.valueText}>{value}</Text>
           <Text style={styles.valueSubtext}>
-            {value === 0 ? 'Chỉ mình bạn' : `Bạn + ${value} khách`}
+            {valueDescription ?? (value === 0 ? 'Chỉ mình bạn' : `Bạn + ${value} khách`)}
           </Text>
         </View>
 

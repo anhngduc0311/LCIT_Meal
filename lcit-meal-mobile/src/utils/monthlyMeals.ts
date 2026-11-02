@@ -1,4 +1,4 @@
-import type { Meal, MealRegistration, Payment } from '../types';
+import type { Meal, MealRegistration, Payment, MealGuestCount } from '../types';
 
 export function monthRange(month: string) {
   const [year, number] = month.split('-').map(Number);
@@ -16,7 +16,7 @@ export function shiftMonth(month: string, offset: number) {
 
 export const countsAsMeal = (record?: MealRegistration) => record?.status === 'confirmed' || record?.status === 'completed';
 
-export function buildMonthlyMeals(month: string, records: MealRegistration[], meals: Meal[], userIds: number[], price: number, guestPrice: number) {
+export function buildMonthlyMeals(month: string, records: MealRegistration[], meals: Meal[], userIds: number[], price: number, guestPrice: number, guests: MealGuestCount[] = []) {
   const { dates } = monthRange(month);
   const dateSet = new Set(dates);
   const ids = new Set(userIds);
@@ -40,9 +40,18 @@ export function buildMonthlyMeals(month: string, records: MealRegistration[], me
     day.staff++; day.guests += guests; day.total += 1 + guests;
     if (record.status === 'completed') completed += 1 + guests;
   }
+  let standaloneAmount = 0;
+  for (const item of guests) {
+    const meal = mealsByDate.get(item.mealDate);
+    const day = days.get(item.mealDate);
+    if (!day || !meal || meal.isCancelled || meal.status !== 'active') continue;
+    const count = Math.max(0, Number(item.guestCount) || 0);
+    day.guests += count; day.total += count; standaloneAmount += count * guestPrice;
+    if (meal.completionStatus === 'completed') completed += count;
+  }
   return { cells, people, days, mealsByDate, completed,
     total: [...days.values()].reduce((sum, day) => sum + day.total, 0),
-    amount: [...people.values()].reduce((sum, person) => sum + person.amount, 0) };
+    amount: standaloneAmount + [...people.values()].reduce((sum, person) => sum + person.amount, 0) };
 }
 
 export function monthlyPaymentState(payments: Payment[], userId: number, month: string) {

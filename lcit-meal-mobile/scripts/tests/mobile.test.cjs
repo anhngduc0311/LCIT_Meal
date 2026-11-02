@@ -327,3 +327,20 @@ test('Only pending range and permanent cancellations need approval; daily cuts n
   assert.deepEqual([...pendingCancellationRequests(options)].map(item => item.id), [3, 2]);
   assert.equal(options[0].id, 1);
 });
+
+test('Standalone guests count by facility/day without adding staff or personal charges', () => {
+  const { buildMonthlyMeals } = app.load('utils/monthlyMeals.ts');
+  const { summarizeFacilityMeals } = app.load('utils/facilities.ts');
+  const meals = [{ id: 1, mealDate: '2026-11-02', status: 'active', completionStatus: 'completed' }];
+  const guests = [{ mealId: 1, mealDate: '2026-11-02', facilityId: 1, guestCount: 3 }];
+  const table = buildMonthlyMeals('2026-11', [], meals, [], 30000, 30000, guests);
+  assert.equal(table.days.get('2026-11-02').staff, 0);
+  assert.equal(table.days.get('2026-11-02').guests, 3);
+  assert.equal(table.total, 3);
+  assert.equal(table.amount, 90000);
+  assert.equal(table.completed, 3);
+  assert.equal(table.people.size, 0);
+  assert.equal(summarizeFacilityMeals([], [], {}, guests)[1].total, 3);
+  assert.equal(summarizeFacilityMeals([], [], {}, guests)[2].total, 0);
+  assert.equal(buildMonthlyMeals('2026-11', [], [{ ...meals[0], isCancelled: true }], [], 30000, 30000, guests).total, 0);
+});

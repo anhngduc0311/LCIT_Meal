@@ -12,6 +12,7 @@ import { useAuth } from '../../providers/AuthProvider';
 import { useDashboardHome } from '../../hooks/useDashboardData';
 import { useManagementRegistrations, useManagementMealOptions } from '../../hooks/useManagementRegistrations';
 import { pendingCancellationRequests } from '../../utils/cancellationRequests';
+import { useMealGuestCounts } from '../../hooks/useManagementMeals';
 import { useUsersList } from '../../hooks/useManagementUsers';
 import { useFacilities } from '../../hooks/useFacilities';
 import { useCancellationDeadline } from '../../hooks/useCancellationDeadline';
@@ -38,13 +39,14 @@ export function KitchenManagerHome() {
   const [refreshing, setRefreshing] = useState(false);
   const dashboard = useDashboardHome(date);
   const registrations = useManagementRegistrations({ from: date, to: date });
+  const guestCounts = useMealGuestCounts({ from: date, to: date });
   const pending = useManagementMealOptions({ status: 'pending' });
   const users = useUsersList();
   const facilities = useFacilities();
   const refresh = async () => {
     setRefreshing(true);
     try {
-      await Promise.all([dashboard.refetch(), registrations.refetch(), pending.refetch(), users.refetch()]);
+      await Promise.all([dashboard.refetch(), registrations.refetch(), pending.refetch(), users.refetch(), guestCounts.refetch()]);
     } finally { setRefreshing(false); }
   };
   const changeDay = (offset: number) => {
@@ -56,10 +58,10 @@ export function KitchenManagerHome() {
   const meal = data?.todayMeal;
   const staff = data?.todayStaff;
   const cancelled = Boolean(meal?.isCancelled ?? meal?.is_cancelled);
-  const summary = summarizeFacilityMeals(registrations.data || [], users.data || [], facilities.overrides);
+  const summary = summarizeFacilityMeals(registrations.data || [], users.data || [], facilities.overrides, guestCounts.data || []);
   const group = summary[facility];
-  const loading = dashboard.isLoading || (group && (registrations.isLoading || users.isLoading || facilities.isLoading));
-  const error = dashboard.error || (group && (registrations.error || users.error));
+  const loading = dashboard.isLoading || guestCounts.isLoading || (group && (registrations.isLoading || users.isLoading || facilities.isLoading));
+  const error = dashboard.error || guestCounts.error || (group && (registrations.error || users.error));
   const staffCount = cancelled || !meal ? 0 : group?.staff ?? Number(staff?.registeredStaffCount ?? staff?.registered_staff_count ?? 0);
   const guests = cancelled || !meal ? 0 : group?.guests ?? Number(staff?.totalGuestCount ?? staff?.total_guest_count ?? 0);
   const total = cancelled || !meal ? 0 : group?.total ?? Number(staff?.totalMealSlots ?? staff?.total_meal_slots ?? meal.totalMealSlots ?? meal.total_meal_slots ?? staffCount + guests);

@@ -26,7 +26,7 @@ import { ErrorState } from '../../src/components/states/ErrorState';
 import { LoadingState } from '../../src/components/states/LoadingState';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { useManagementRegistrations } from '../../src/hooks/useManagementRegistrations';
-import { useManagementMeals } from '../../src/hooks/useManagementMeals';
+import { useManagementMeals, useMealGuestCounts } from '../../src/hooks/useManagementMeals';
 import { useUsersList } from '../../src/hooks/useManagementUsers';
 import { useManagementPayments, useMarkPaid } from '../../src/hooks/useManagementPayments';
 import { useSystemSettings } from '../../src/hooks/useManagementSettings';
@@ -40,6 +40,7 @@ import type { MealRegistration, Payment, User } from '../../src/types';
 import { mealService } from '../../src/services/mealService';
 import { colors } from '../../src/theme/colors';
 import { radius } from '../../src/theme/radius';
+import { GuestCounter } from '../../src/components/meals/GuestCounter';
 
 const weekdays = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 
@@ -88,10 +89,14 @@ function MonthlyBoard() {
   const busy = useRef(false);
   const [paymentPerson, setPaymentPerson] = useState<User | null>(null);
   const [invoice, setInvoice] = useState<Payment | null>(null);
+  const [guestOpen, setGuestOpen] = useState(false);
+  const [guestDate, setGuestDate] = useState(today);
+  const [guestExtra, setGuestExtra] = useState(1);
 
   const range = useMemo(() => monthRange(month), [month]);
   const registrations = useManagementRegistrations({ from: range.from, to: range.to });
   const meals = useManagementMeals({ from: range.from, to: range.to });
+  const mealGuests = useMealGuestCounts({ from: range.from, to: range.to });
   const users = useUsersList();
   const payments = useManagementPayments({ from: range.from, to: range.to });
   const settings = useSystemSettings();
@@ -112,9 +117,10 @@ function MonthlyBoard() {
   const pricesReady = settingValue('meal_price') !== undefined && Number.isFinite(price) && price >= 0
     && settingValue('guest_meal_price') !== undefined && Number.isFinite(guestPrice) && guestPrice >= 0;
 
-  const table = buildMonthlyMeals(month, registrations.data || [], meals.data || [], people.map(p => p.id), pricesReady ? price : 0, pricesReady ? guestPrice : 0);
-  const loading = registrations.isLoading || meals.isLoading || users.isLoading || facilities.isLoading;
-  const error = registrations.error || meals.error || users.error;
+  const standaloneGuests = (mealGuests.data || []).filter(item => facility === 'all' || item.facilityId === facility);
+  const table = buildMonthlyMeals(month, registrations.data || [], meals.data || [], people.map(p => p.id), pricesReady ? price : 0, pricesReady ? guestPrice : 0, standaloneGuests);
+  const loading = registrations.isLoading || meals.isLoading || users.isLoading || facilities.isLoading || mealGuests.isLoading;
+  const error = registrations.error || meals.error || users.error || mealGuests.error;
 
   // Statistics for quick chips
   const peopleWithMealsCount = people.filter(p => (table.people.get(p.id)?.staff || 0) > 0).length;
@@ -147,7 +153,7 @@ function MonthlyBoard() {
 
 
   const refresh = async () => {
-    await Promise.all([registrations.refetch(), meals.refetch(), users.refetch(), payments.refetch(), settings.refetch()]);
+    await Promise.all([registrations.refetch(), meals.refetch(), mealGuests.refetch(), users.refetch(), payments.refetch(), settings.refetch()]);
   };
 
   const changeMonth = (next: string) => {
@@ -203,6 +209,29 @@ function MonthlyBoard() {
   // Day View helpers
   const selectedMeal = table.mealsByDate.get(selectedDate);
   const selectedDayStats = table.days.get(selectedDate) || { staff: 0, guests: 0, total: 0 };
+  const saveGuests = async () => {
+    const meal = table.mealsByDate.get(guestDate);
+    if (busy.current || !meal || (facility !== 1 && facility !== 2)) return;
+    busy.current = true; setSaving(true);
+    try {
+      await mealService.addMealGuests(meal.id, facility, guestExtra, isMockMode);
+      setNotice({ variant: 'success', message: `Đã thêm ${guestExtra} suất khách cho Cơ sở ${facility}, ngày ${formatDisplayDate(guestDate)}.` });
+    } catch (error) {
+      setNotice({ variant: 'error', message: error instanceof Error ? error.message : 'Chưa thêm được suất khách.' });
+    } finally {
+      setGuestOpen(false);
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: ['management', 'registrations'] }),
+        queryClient.invalidateQueries({ queryKey: ['meal-guests'] }),
+        queryClient.invalidateQueries({ queryKey: ['meal-registrations'] }),
+        queryClient.invalidateQueries({ queryKey: ['registrations'] }),
+        queryClient.invalidateQueries({ queryKey: ['dashboard'] }),
+        queryClient.invalidateQueries({ queryKey: ['payments'] }),
+        queryClient.invalidateQueries({ queryKey: ['meals'] }),
+      ]);
+      busy.current = false; setSaving(false);
+    }
+  };
   const dayPeople = visiblePeople.filter(person => {
     if (daySubFilter === 'all') return true;
     const record = table.cells.get(`${selectedDate}:${person.id}`);
@@ -401,7 +430,7 @@ function MonthlyBoard() {
         <LoadingState message="Đang tổng hợp bảng tháng..." />
       ) : error ? (
         <ErrorState message={error.message} onRetry={() => { void refresh(); }} />
-      ) : visiblePeople.length === 0 ? (
+      ) : visiblePeople.length === 0 && viewMode === 'staff' ? (
         <View style={styles.emptyContainer}>
           <Ionicons name="search-outline" size={40} color={colors.textMuted} />
           <Text style={styles.emptyText}>Không tìm thấy cán bộ phù hợp.</Text>
@@ -628,6 +657,12 @@ function MonthlyBoard() {
               </View>
             </View>
 
+            <View style={styles.guestDayActions}>
+              <Text style={styles.selectedDaySub}>{selectedDayStats.staff} cán bộ · {selectedDayStats.guests} khách</Text>
+              <Button title="Thêm suất khách" size="sm" variant="outline"
+                disabled={saving || !selectedMeal || Boolean(selectedMeal.isCancelled) || selectedMeal.status !== 'active' || (facility !== 1 && facility !== 2)}
+                onPress={() => { setGuestDate(selectedDate); setGuestExtra(1); setGuestOpen(true); }} />
+            </View>
             {/* Sub-filter chips for day view */}
             <View style={styles.daySubFilterRow}>
               <TouchableOpacity
@@ -765,6 +800,23 @@ function MonthlyBoard() {
         onCancel={() => { if (!busy.current) setAction(null); }}
       />
 
+      <Modal visible={guestOpen} transparent animationType="fade" onRequestClose={() => { if (!saving) setGuestOpen(false); }}>
+        <ModalBackdrop style={styles.backdrop}>
+          <ModalCard style={[styles.dialog, { maxHeight: '92%', padding: 0 }]}>
+            <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 20, gap: 12 }} nestedScrollEnabled>
+              <Text style={styles.dialogTitle}>Thêm suất khách</Text>
+              <Text style={styles.dialogHint}>Ngày ăn: {formatDisplayDate(guestDate)}</Text>
+              <Text style={styles.dialogHint}>Cơ sở {facility}</Text>
+              <GuestCounter value={guestExtra} onChange={setGuestExtra} min={1} max={1000} disabled={saving}
+                label="Số suất khách cần thêm" valueDescription={`${guestExtra} suất khách`} helperText="" />
+              <View style={styles.actions}>
+                <Button title="Hủy" variant="secondary" disabled={saving} onPress={() => setGuestOpen(false)} style={{ flex: 1 }} />
+                <Button title="Thêm khách" loading={saving} onPress={() => { void saveGuests(); }} style={{ flex: 1 }} />
+              </View>
+            </ScrollView>
+          </ModalCard>
+        </ModalBackdrop>
+      </Modal>
       {/* Modal: Month Selection */}
       <Modal visible={monthOpen} transparent animationType="fade" onRequestClose={() => setMonthOpen(false)}>
         <ModalBackdrop style={styles.backdrop}>
@@ -863,6 +915,7 @@ function MonthlyBoard() {
 }
 
 const styles = StyleSheet.create({
+  guestDayActions: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginTop: 8 },
   flowContent: { paddingVertical: 12 },
   flowHeader: { marginBottom: 12 },
   flowDayView: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto' },

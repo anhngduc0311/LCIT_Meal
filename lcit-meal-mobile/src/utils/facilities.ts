@@ -45,7 +45,7 @@ export function registrationPerson(record: MealRegistration, users: FacilityPers
 }
 
 export function summarizeFacilityMeals(
-  records: MealRegistration[], users: FacilityPerson[], overrides: FacilityOverrides = {},
+  records: MealRegistration[], users: FacilityPerson[], overrides: FacilityOverrides = {}, guests: { facilityId: 1 | 2; guestCount: number }[] = [],
 ) {
   const summary = {
     1: { staff: 0, guests: 0, total: 0 },
@@ -61,5 +61,6 @@ export function summarizeFacilityMeals(
     group.guests += guests;
     group.total += 1 + guests;
   }
+  for (const item of guests) { summary[item.facilityId].guests += Number(item.guestCount); summary[item.facilityId].total += Number(item.guestCount); }
   return summary;
 }

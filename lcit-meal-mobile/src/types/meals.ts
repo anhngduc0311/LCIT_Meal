@@ -4,6 +4,7 @@
  */
 
 export interface Meal {
+  completionStatus?: 'pending' | 'serving' | 'completed';
   id: number;
   mealDate: string; // YYYY-MM-DD
   isCancelled: boolean | number;
@@ -12,6 +13,13 @@ export interface Meal {
   status: 'active' | 'cancelled' | string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface MealGuestCount {
+  mealId: number;
+  mealDate: string;
+  facilityId: 1 | 2;
+  guestCount: number;
 }
 
 export type MealRegistrationStatus = 'pending' | 'confirmed' | 'completed' | 'cancelled';

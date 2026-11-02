@@ -252,6 +252,20 @@ export const mealService = {
     });
   },
 
+  async getMealGuestCounts(params: { from?: string; to?: string } = {}, useMock = false): Promise<import('../types').MealGuestCount[]> {
+    if (useMock) return mockStore.getMealGuestCounts(params.from, params.to);
+    const query = new URLSearchParams();
+    if (params.from) query.set('from', params.from);
+    if (params.to) query.set('to', params.to);
+    return apiClient<import('../types').MealGuestCount[]>(`/meals/guests?${query}`);
+  },
+
+  async addMealGuests(mealId: number, facilityId: 1 | 2, count: number, useMock = false): Promise<import('../types').MealGuestCount> {
+    if (!Number.isInteger(count) || count < 1 || count > 1000) throw new Error('Số suất khách phải từ 1 đến 1000.');
+    if (useMock) return mockStore.addMealGuests(mealId, facilityId, count);
+    return apiClient<import('../types').MealGuestCount>(`/meals/${mealId}/guests`, { method: 'PATCH', body: JSON.stringify({ facilityId, count }) });
+  },
+
   /**
    * Cập nhật số lượng khách: PUT /api/meal-registrations/:id
    */

@@ -16,6 +16,9 @@ const mealRoutes = (mealController, authMiddleware, authorize) => {
   router.get("/filter", authorize(...ROLE.STAFF_ROLES), mealController.filter);
 
   // GET /api/meals/:id
+  router.get('/guests', authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN), mealController.guestCounts);
+  router.patch('/:id/guests', authorize(ROLE.ADMIN, ROLE.MANAGER), mealController.addGuests);
+
   router.get("/:id", authorize(...ROLE.STAFF_ROLES), mealController.get);
 
   // GET /api/meals/:id/summary - số suất ăn cần chuẩn bị (join meal_registration)

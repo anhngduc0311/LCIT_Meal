@@ -25,6 +25,14 @@ CREATE TABLE IF NOT EXISTS meal (
   cancelled_by INTEGER REFERENCES "user"(id) ON DELETE SET NULL, note VARCHAR(255),
   status VARCHAR(20) NOT NULL DEFAULT 'active', created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+CREATE TABLE IF NOT EXISTS meal_guest_count (
+  meal_id INTEGER NOT NULL REFERENCES meal(id) ON DELETE CASCADE,
+  facility_id INTEGER NOT NULL CHECK (facility_id IN (1,2)),
+  guest_count INTEGER NOT NULL DEFAULT 0 CHECK (guest_count >= 0),
+  updated_by INTEGER REFERENCES "user"(id) ON DELETE SET NULL,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (meal_id, facility_id)
+);
 CREATE TABLE IF NOT EXISTS meal_registration (
   id SERIAL PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES "user"(id),
   meal_id INTEGER NOT NULL REFERENCES meal(id), guest_count INTEGER NOT NULL DEFAULT 0 CHECK (guest_count BETWEEN 0 AND 10),

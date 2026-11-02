@@ -13,6 +13,7 @@ const idTables = new Set(['user', 'user_role', 'role', 'meal', 'meal_option',
   'meal_registration', 'payment', 'notification', 'notification_recipient',
   'system_setting', 'meal_schedule_config', 'holiday_event', 'audit_log']);
 const conflictColumns = {
+  meal_guest_count: 'meal_id, facility_id',
   meal: 'meal_date', meal_registration: 'user_id, meal_id',
   system_setting: 'setting_key', meal_schedule_config: 'day_of_week',
 };

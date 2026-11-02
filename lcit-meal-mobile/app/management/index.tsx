@@ -45,6 +45,7 @@ import { useUsersList } from '../../src/hooks/useManagementUsers';
 import { FacilityFilter, facilityLabel, getFacility, matchesFacility, summarizeFacilityMeals } from '../../src/utils/facilities';
 import { formatBusinessDate } from '../../src/utils/formatters';
 import { pendingCancellationRequests } from '../../src/utils/cancellationRequests';
+import { useMealGuestCounts } from '../../src/hooks/useManagementMeals';
 
 export default function ManagementDashboardScreen({ isTab = false }: { isTab?: boolean } = {}) {
   const router = useRouter();
@@ -58,6 +59,7 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
   const { overrides, isLoading: loadingFacilities } = useFacilities();
   const { data: facilityUsers = [], isLoading: loadingUsers, isError: usersError, refetch: refetchUsers } = useUsersList();
   const today = formatBusinessDate(new Date());
+  const guestCounts = useMealGuestCounts({ from: today, to: today });
   const { data: todayRegistrations = [], isLoading: loadingFacilityMeals, isError: facilityMealsError, refetch: refetchFacilityMeals } =
     useManagementRegistrations({ from: today, to: today });
 
@@ -104,7 +106,7 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
     if (refreshing) return;
     setRefreshing(true);
     try {
-      await Promise.all([refetchHome(), refetchChart(), refetchRegs(), refetchUsers(), refetchFacilityMeals()]);
+      await Promise.all([refetchHome(), refetchChart(), refetchRegs(), refetchUsers(), refetchFacilityMeals(), guestCounts.refetch()]);
     } finally {
       setRefreshing(false);
     }
@@ -123,9 +125,9 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
     refetchRegs();
   };
 
-  const facilitySummary = summarizeFacilityMeals(todayRegistrations, facilityUsers, overrides);
+  const facilitySummary = summarizeFacilityMeals(todayRegistrations, facilityUsers, overrides, guestCounts.data || []);
   const selectedSummary = facilityFilter === 'all' ? null : facilitySummary[facilityFilter];
-  const facilityReady = !loadingFacilityMeals && !loadingFacilities && !facilityMealsError && !loadingUsers && !usersError;
+  const facilityReady = !loadingFacilityMeals && !loadingFacilities && !facilityMealsError && !loadingUsers && !usersError && !guestCounts.isLoading && !guestCounts.isError;
   const cancelled = Boolean(homeData?.todayMeal?.isCancelled ?? homeData?.todayMeal?.is_cancelled);
   const todaySlots = selectedSummary ? (facilityReady ? (cancelled ? 0 : selectedSummary.total) : '—') : homeData?.todayStaff?.total_meal_slots ?? homeData?.todayMeal?.total_meal_slots ?? 0;
   const todayStaffCount = selectedSummary ? (facilityReady ? (cancelled ? 0 : selectedSummary.staff) : '—') : homeData?.todayStaff?.registered_staff_count ?? 0;

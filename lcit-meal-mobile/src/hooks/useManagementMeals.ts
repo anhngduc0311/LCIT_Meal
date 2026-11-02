@@ -16,6 +16,11 @@ export function useManagementMeals(params: { from?: string; to?: string; status?
   });
 }
 
+export function useMealGuestCounts(params: { from?: string; to?: string } = {}) {
+  const { isMockMode } = useAuth();
+  return useQuery({ queryKey: ['meal-guests', params, isMockMode], queryFn: () => mealService.getMealGuestCounts(params, isMockMode) });
+}
+
 export function useMealSummary(mealId: number) {
   const { isMockMode } = useAuth();
 

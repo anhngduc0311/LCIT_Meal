@@ -89,6 +89,31 @@ async function main() {
   await req('manager', `/payments/${bill.id}/mark-paid`, 'PATCH', { paidAmount: 60000 });
   assert.equal((await req('employee', '/payments/me/ledger')).totalUnpaidAmount, 0);
   await req('admin', `/meal-registrations/${accrued.id}/cancel`, 'PATCH', {});
+  await Promise.all([
+    req('admin', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 2 }),
+    req('manager', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 3 }),
+  ]);
+  await req('manager', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 2, count: 4 });
+  const guests = await req('admin', '/meals/guests?from=2001-01-02&to=2001-01-02');
+  assert.equal(guests.find(g => g.facilityId === 1).guestCount, 5);
+  assert.equal(guests.find(g => g.facilityId === 2).guestCount, 4);
+  const kitchenTotals = await req('kitchen', '/dashboard/home?date=2001-01-02');
+  assert.equal(kitchenTotals.todayStaff.total_guest_count, 9);
+  assert.equal(kitchenTotals.todayStaff.total_meal_slots, 9);
+  assert.equal((await req('employee', '/payments/me/ledger')).totalUnpaidAmount, 0);
+  const guestChart = await req('admin', '/dashboard/chart?period=month&date=2001-01-02');
+  assert.equal(guestChart.data.find(row => row.meal_date === '2001-01-02').total_meal_slots, 9);
+  const guestYear = await req('admin', '/dashboard/chart?period=year&date=2001-01-02');
+  assert.equal(guestYear.data.find(row => row.meal_date === '2001-01').total_meal_slots, 9);
+  const guestSummary = await req('admin', `/meals/${oldMeal.insertId}/summary`);
+  assert.equal(guestSummary.registeredCount, 0);
+  assert.equal(guestSummary.guestCountTotal, 9);
+  await req('admin', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 3, count: 1 }, 400);
+  await req('admin', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 0 }, 400);
+  await req('employee', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 1 }, 403);
+  await pool.query('UPDATE meal SET is_cancelled=1 WHERE id=?', [oldMeal.insertId]);
+  await req('manager', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 1 }, 409);
+  assert.equal((await req('admin', '/meals/guests?from=2001-01-02&to=2001-01-02')).length, 0);
   await req('employee', '/notifications/me');
   await req('employee', '/notifications/me/seen-all', 'PATCH', {});
   const dayRepo = new (require('../../src/repos/MealScheduleConfigRepository'))();

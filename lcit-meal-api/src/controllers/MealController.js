@@ -2,6 +2,14 @@ const ApiResponse = require("../ultis/ApiResponse");
 const { getActor } = require("../ultis/actor");
 
 class MealController {
+  guestCounts = async (req, res, next) => {
+    try { return ApiResponse.success(res, await this.mealService.guestCounts(req.query.from, req.query.to)); }
+    catch (error) { next(error); }
+  };
+  addGuests = async (req, res, next) => {
+    try { return ApiResponse.success(res, await this.mealService.addGuests(req.params.id, req.body, getActor(req))); }
+    catch (error) { next(error); }
+  };
   constructor(mealService) {
     this.mealService = mealService;
   }

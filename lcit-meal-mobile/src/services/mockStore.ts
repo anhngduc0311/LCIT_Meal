@@ -7,6 +7,7 @@ import { formatBusinessDate } from '../utils/formatters';
 
 import {
   User,
+  MealGuestCount,
   Meal,
   MealRegistration,
   MealOption,
@@ -41,6 +42,20 @@ import {
 } from '../mocks/fixtures';
 
 class MockStore {
+  private mealGuestCounts: MealGuestCount[] = [];
+  getMealGuestCounts(from?: string, to?: string): MealGuestCount[] {
+    return this.mealGuestCounts.filter(item => (!from || item.mealDate >= from) && (!to || item.mealDate <= to)
+      && this.meals.some(meal => meal.id === item.mealId && !meal.isCancelled && meal.status === 'active'));
+  }
+  addMealGuests(mealId: number, facilityId: 1 | 2, count: number): MealGuestCount {
+    const meal = this.meals.find(item => item.id === mealId && !item.isCancelled && item.status === 'active');
+    if (!meal) throw new Error('Bếp không phục vụ ngày này.');
+    let item = this.mealGuestCounts.find(item => item.mealId === mealId && item.facilityId === facilityId);
+    if (!item) { item = { mealId, mealDate: meal.mealDate, facilityId, guestCount: 0 }; this.mealGuestCounts.push(item); }
+    item.guestCount += count;
+    this.notify();
+    return { ...item };
+  }
   private users: User[] = [...mockUsers];
   private meals: Meal[] = [...mockMeals];
   private registrations: MealRegistration[] = [...mockRegistrations];

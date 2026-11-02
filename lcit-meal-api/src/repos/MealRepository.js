@@ -62,6 +62,23 @@ const getCompletionStatusParams = () => {
 };
 
 class MealRepository {
+  async filterGuestCounts(fromDate, toDate) {
+    const [rows] = await pool.query(`SELECT g.meal_id, g.facility_id, g.guest_count, DATE_FORMAT(m.meal_date, '%Y-%m-%d') AS meal_date
+      FROM meal_guest_count g JOIN meal m ON m.id=g.meal_id
+      WHERE m.is_cancelled=0 AND m.status='active' AND m.meal_date BETWEEN ? AND ? ORDER BY m.meal_date`, [fromDate || '2000-01-01', toDate || '9999-12-31']);
+    return rows.map(row => ({ mealId: row.meal_id, facilityId: row.facility_id, guestCount: row.guest_count, mealDate: row.meal_date }));
+  }
+
+  async addGuestCount(mealId, facilityId, count, actorId) {
+    const [result] = await pool.query(`INSERT INTO meal_guest_count(meal_id,facility_id,guest_count,updated_by)
+      SELECT id,?,?,? FROM meal WHERE id=? AND is_cancelled=0 AND status='active'
+      ON DUPLICATE KEY UPDATE guest_count=meal_guest_count.guest_count+VALUES(guest_count), updated_by=VALUES(updated_by), updated_at=NOW()`,
+    [facilityId, count, actorId || null, mealId]);
+    if (!result.affectedRows) return null;
+    const [[row]] = await pool.query('SELECT meal_id,facility_id,guest_count FROM meal_guest_count WHERE meal_id=? AND facility_id=?', [mealId, facilityId]);
+    return { mealId: row.meal_id, facilityId: row.facility_id, guestCount: row.guest_count };
+  }
+
   async list() {
     const [rows] = await pool.query(`
       SELECT ${MEAL_SELECT_FIELDS}
@@ -345,8 +362,8 @@ class MealRepository {
                 m.note,
                 m.status,
                 m.created_at,
-                COALESCE(SUM(CASE WHEN mr.status = 'confirmed' THEN 1 ELSE 0 END), 0) AS registered_count,
-                COALESCE(SUM(CASE WHEN mr.status = 'confirmed' THEN mr.guest_count ELSE 0 END), 0) AS guest_count_total
+                COALESCE(SUM(CASE WHEN mr.status IN ('confirmed','completed') THEN 1 ELSE 0 END), 0) AS registered_count,
+                COALESCE(SUM(CASE WHEN mr.status IN ('confirmed','completed') THEN mr.guest_count ELSE 0 END), 0) AS guest_count_total
             FROM meal m
             LEFT JOIN meal_registration mr ON mr.meal_id = m.id
             WHERE m.id = ?
@@ -359,6 +376,8 @@ class MealRepository {
       return null;
     }
 
+    const extra = await this.filterGuestCounts(rows[0].meal_date, rows[0].meal_date);
+    rows[0].guest_count_total = Number(rows[0].guest_count_total) + extra.reduce((sum, item) => sum + Number(item.guestCount), 0);
     return new Meal(rows[0]);
   }
 }
