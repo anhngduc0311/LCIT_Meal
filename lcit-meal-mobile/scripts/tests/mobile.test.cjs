@@ -314,3 +314,16 @@ test('Mock store preserves registration ID and waits for cancellation approval',
   assert.equal(again.id, reg.id);
   assert.equal(again.status, 'confirmed');
 });
+
+test('Only pending range and permanent cancellations need approval; daily cuts never enter the queue', () => {
+  const { pendingCancellationRequests } = app.load('utils/cancellationRequests.ts');
+  const options = [
+    { id: 1, type: 'cancel_today', status: 'pending', createdAt: '2026-11-01' },
+    { id: 2, type: 'cancel_schedule', status: 'pending', createdAt: '2026-11-02' },
+    { id: 3, type: 'cancel_permanent', status: 'pending', createdAt: '2026-11-01' },
+    { id: 4, type: 'cancel_schedule', status: 'approved' },
+    { id: 5, type: 'cancel_permanent', status: 'rejected' },
+  ];
+  assert.deepEqual([...pendingCancellationRequests(options)].map(item => item.id), [3, 2]);
+  assert.equal(options[0].id, 1);
+});

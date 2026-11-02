@@ -89,11 +89,12 @@ class MealRegistrationService {
       if (closeTime && nowTime >= closeTime) {
         // Quá giờ đóng đăng ký, nhưng chưa quá giờ hoàn thành bữa ăn
         if (!isManagement) {
-          // Nhân viên thường phải request cho admin duyệt
+          // Cắt từng ngày không tạo hàng chờ duyệt. Sau giờ chốt thì chặn
+          // thao tác như ứng dụng cá nhân; chỉ khoảng/dài hạn cần duyệt.
           return {
-            canCancel: true,
-            requiresApproval: true,
-            reason: `Đã quá giờ đóng đăng ký (${closeTime}). Yêu cầu của bạn sẽ được gửi cho quản lý xét duyệt.`,
+            canCancel: false,
+            requiresApproval: false,
+            reason: `Đã quá giờ cắt suất hôm nay (${closeTime}). Vui lòng liên hệ quản lý nếu cần điều chỉnh.`,
           };
         }
         // Admin/manager có thể cắt ngay
@@ -596,37 +597,6 @@ class MealRegistrationService {
 
     if (!permission.canCancel) {
       throw new AppError(permission.reason, 409);
-    }
-
-    // Nếu yêu cầu cắt từ nhân viên thường sau giờ đóng đăng ký,
-    // tạo request pending để admin duyệt thay vì cắt ngay
-    if (permission.requiresApproval) {
-      const cancelRequest = await this.mealRegistrationRepository.updateStatus(
-        id,
-        MEAL_REGISTRATION_STATUS.PENDING,
-      );
-
-      await this.logAction(
-        LOG_ACTION.ACTION_UPDATE,
-        actor,
-        `meal_registration:${id}`,
-        `Gửi yêu cầu cắt suất ăn ngày ${registration.mealDate} (chờ duyệt)`,
-        registration,
-        cancelRequest,
-      );
-
-      // Thông báo cho admin/manager review yêu cầu
-      await this.notificationService.notifyRoles(
-        {
-          title: `Yêu cầu cắt suất ăn ngày ${registration.mealDate}`,
-          content: `Nhân viên ${registration.userName || "#" + registration.userId} đã gửi yêu cầu cắt suất ăn ngày ${registration.mealDate} (sau giờ đóng đăng ký). Vui lòng xét duyệt.`,
-          url: `/meal-registration/view?id=${id}`,
-          createdBy: actor.actorId || null,
-        },
-        [ROLE.ADMIN, ROLE.MANAGER],
-      );
-
-      return cancelRequest;
     }
 
     // Cắt suất ngay (admin/manager trực tiếp cắt, hoặc nhân viên cắt trước giờ đóng)

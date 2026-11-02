@@ -10,7 +10,8 @@ import { DatePickerModal } from '../common/DatePickerModal';
 import { ErrorState, LoadingState } from '../states';
 import { useAuth } from '../../providers/AuthProvider';
 import { useDashboardHome } from '../../hooks/useDashboardData';
-import { useManagementRegistrations } from '../../hooks/useManagementRegistrations';
+import { useManagementRegistrations, useManagementMealOptions } from '../../hooks/useManagementRegistrations';
+import { pendingCancellationRequests } from '../../utils/cancellationRequests';
 import { useUsersList } from '../../hooks/useManagementUsers';
 import { useFacilities } from '../../hooks/useFacilities';
 import { useCancellationDeadline } from '../../hooks/useCancellationDeadline';
@@ -20,7 +21,7 @@ import { colors } from '../../theme/colors';
 
 const actions = [
   { title: 'Bảng suất ăn tháng', detail: 'Theo dõi ăn và thanh toán từng cán bộ', icon: 'grid-outline', path: '/management/monthly' },
-  { title: 'Danh sách suất ăn', detail: 'Cán bộ và khách theo từng ngày', icon: 'people-outline', path: '/management/registrations' },
+  { title: 'Duyệt cắt suất', detail: 'Xử lý yêu cầu cắt suất của cán bộ', icon: 'checkbox-outline', path: '/management/registrations' },
   { title: 'Lịch bếp ăn', detail: 'Sắp xếp ngày phục vụ, ngày nghỉ', icon: 'calendar-outline', path: '/management/meals' },
   { title: 'Quản lý thanh toán', detail: 'Theo dõi và đối soát tiền ăn', icon: 'wallet-outline', path: '/management/payments' },
   { title: 'Báo cáo tổng quan', detail: 'Thống kê suất ăn và công nợ', icon: 'bar-chart-outline', path: '/management' },
@@ -37,7 +38,7 @@ export function KitchenManagerHome() {
   const [refreshing, setRefreshing] = useState(false);
   const dashboard = useDashboardHome(date);
   const registrations = useManagementRegistrations({ from: date, to: date });
-  const pending = useManagementRegistrations({ status: 'pending' });
+  const pending = useManagementMealOptions({ status: 'pending' });
   const users = useUsersList();
   const facilities = useFacilities();
   const refresh = async () => {
@@ -93,7 +94,7 @@ export function KitchenManagerHome() {
 
       <Card padding="lg" style={styles.pending} onPress={() => router.push({ pathname: '/management/registrations', params: { status: 'pending', date: 'all', facility: 'all' } })}>
         <View style={styles.pendingIcon}><Ionicons name="time-outline" size={24} color="#A66A16" /></View>
-        <View style={styles.pendingCopy}><Text style={styles.pendingTitle}>Yêu cầu chờ duyệt</Text><Text style={styles.detail}>{pending.isError ? 'Chưa tải được · Nhấn để xem danh sách' : pending.isLoading ? 'Đang kiểm tra yêu cầu...' : `${pending.data?.length ?? 0} yêu cầu cắt suất cần xử lý · Tất cả cơ sở`}</Text></View><Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
+        <View style={styles.pendingCopy}><Text style={styles.pendingTitle}>Yêu cầu chờ duyệt</Text><Text style={styles.detail}>{pending.isError ? 'Chưa tải được · Nhấn để xem danh sách' : pending.isLoading ? 'Đang kiểm tra yêu cầu...' : `${pendingCancellationRequests(pending.data || []).length} yêu cầu cắt suất cần xử lý · Tất cả cơ sở`}</Text></View><Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
       </Card>
 
       <Text style={styles.sectionTitle}>Quản lý bếp ăn</Text>

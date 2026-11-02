@@ -30,8 +30,9 @@ import { useAuth } from '../../src/providers/AuthProvider';
 import { useDashboardHome, useDashboardChart } from '../../src/hooks/useDashboardData';
 import {
   useManagementRegistrations,
-  useApproveCancelRegistration,
-  useRejectCancelRegistration,
+  useManagementMealOptions,
+  useApproveMealOption,
+  useRejectMealOption,
 } from '../../src/hooks/useManagementRegistrations';
 import { formatCurrency, formatBusinessDateDisplay } from '../../src/utils/formatters';
 import { colors } from '../../src/theme/colors';
@@ -41,8 +42,9 @@ import { radius } from '../../src/theme/radius';
 import { FacilitySelector } from '../../src/components/common/FacilitySelector';
 import { useFacilities } from '../../src/hooks/useFacilities';
 import { useUsersList } from '../../src/hooks/useManagementUsers';
-import { FacilityFilter, facilityLabel, getFacility, matchesFacility, registrationPerson, summarizeFacilityMeals } from '../../src/utils/facilities';
+import { FacilityFilter, facilityLabel, getFacility, matchesFacility, summarizeFacilityMeals } from '../../src/utils/facilities';
 import { formatBusinessDate } from '../../src/utils/formatters';
+import { pendingCancellationRequests } from '../../src/utils/cancellationRequests';
 
 export default function ManagementDashboardScreen({ isTab = false }: { isTab?: boolean } = {}) {
   const router = useRouter();
@@ -77,12 +79,13 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
     refetch: refetchChart,
   } = useDashboardChart(selectedPeriod);
 
-  const { data: pendingRegs = [], refetch: refetchRegs } = useManagementRegistrations({
+  const { data: pendingOptions = [], refetch: refetchRegs } = useManagementMealOptions({
     status: 'pending',
   });
 
-  const approveMutation = useApproveCancelRegistration();
-  const rejectMutation = useRejectCancelRegistration();
+  const pendingRegs = pendingCancellationRequests(pendingOptions);
+  const approveMutation = useApproveMealOption();
+  const rejectMutation = useRejectMealOption();
 
   if (!hasAccess) {
     return (
@@ -122,13 +125,13 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
 
   const facilitySummary = summarizeFacilityMeals(todayRegistrations, facilityUsers, overrides);
   const selectedSummary = facilityFilter === 'all' ? null : facilitySummary[facilityFilter];
-  const facilityReady = !loadingFacilityMeals && !loadingFacilities && !facilityMealsError;
+  const facilityReady = !loadingFacilityMeals && !loadingFacilities && !facilityMealsError && !loadingUsers && !usersError;
   const cancelled = Boolean(homeData?.todayMeal?.isCancelled ?? homeData?.todayMeal?.is_cancelled);
   const todaySlots = selectedSummary ? (facilityReady ? (cancelled ? 0 : selectedSummary.total) : '—') : homeData?.todayStaff?.total_meal_slots ?? homeData?.todayMeal?.total_meal_slots ?? 0;
   const todayStaffCount = selectedSummary ? (facilityReady ? (cancelled ? 0 : selectedSummary.staff) : '—') : homeData?.todayStaff?.registered_staff_count ?? 0;
   const todayGuestCount = selectedSummary ? (facilityReady ? (cancelled ? 0 : selectedSummary.guests) : '—') : homeData?.todayStaff?.total_guest_count ?? 0;
-  const scopedPending = pendingRegs.filter(record => matchesFacility(getFacility(registrationPerson(record, facilityUsers), overrides), facilityFilter));
-  const pendingCount = facilityFilter === 'all' ? pendingRegs.length || homeData?.pendingMealOptionCount || 0 : scopedPending.length;
+  const scopedPending = pendingRegs.filter(record => matchesFacility(getFacility(facilityUsers.find(user => user.id === record.userId) || { id: record.userId, fullName: record.userName || record.user?.fullName }, overrides), facilityFilter));
+  const pendingCount = facilityFilter === 'all' ? pendingRegs.length : scopedPending.length;
   const outstandingAmount = homeData?.outstanding?.total_outstanding_amount ?? 0;
   const unpaidRecords = homeData?.outstanding?.unpaid_record_count ?? 0;
 
@@ -285,9 +288,9 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
                     <Ionicons name="person" size={16} color={colors.primaryDark} />
                   </View>
                   <View style={styles.pendingInfo}>
-                    <Text style={styles.pendingName}>{item.user?.fullName || 'Cán bộ'}</Text>
+                    <Text style={styles.pendingName}>{facilityUsers.find(user => user.id === item.userId)?.fullName || item.userName || item.user?.fullName || 'Cán bộ'}</Text>
                     <Text style={styles.pendingDate}>
-                      Ngày ăn: {formatBusinessDateDisplay(item.mealDate || '')}
+                      {formatBusinessDateDisplay(item.fromDate)} – {item.type === 'cancel_permanent' ? 'Dài hạn' : formatBusinessDateDisplay(item.toDate)}
                     </Text>
                   </View>
                   <Badge label="Chờ duyệt" variant="warning" size="sm" />
@@ -350,8 +353,8 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
               <View style={[styles.menuGridIcon, { backgroundColor: '#FEF3C7' }]}>
                 <Ionicons name="checkbox-outline" size={24} color="#B45309" />
               </View>
-              <Text style={styles.menuGridTitle}>Đăng ký & Duyệt cắt</Text>
-              <Text style={styles.menuGridDesc}>Tổng hợp suất ăn, duyệt cắt, thao tác hộ</Text>
+              <Text style={styles.menuGridTitle}>Duyệt cắt suất</Text>
+              <Text style={styles.menuGridDesc}>Duyệt hoặc từ chối yêu cầu cắt suất</Text>
             </Card>
 
             {/* Phân hệ 3: Thu tiền ăn */}
@@ -453,8 +456,8 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
         title={actionType === 'approve' ? 'Xác nhận duyệt cắt suất' : 'Từ chối yêu cầu cắt suất'}
         message={
           actionType === 'approve'
-            ? 'Bạn có chắc chắn muốn duyệt yêu cầu cắt suất này? Suất ăn sẽ được chuyển sang trạng thái Đã hủy (Cancelled).'
-            : 'Bạn có chắc chắn muốn từ chối yêu cầu cắt suất này? Suất ăn sẽ tiếp tục được giữ ở trạng thái Đã xác nhận (Confirmed).'
+            ? 'Bạn có chắc chắn muốn duyệt cắt suất trong khoảng ngày đã yêu cầu?'
+            : 'Bạn có chắc chắn muốn từ chối yêu cầu và giữ lại suất ăn?'
         }
         confirmText={actionType === 'approve' ? 'Duyệt cắt' : 'Từ chối'}
         cancelText="Hủy bỏ"

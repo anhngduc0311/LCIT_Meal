@@ -56,3 +56,30 @@ test('Controller actor supports string and object role forms', () => {
     assert.ok(getActor({ user, headers: {} }).roles.some(r => ['admin', 'manager'].includes(r)));
   }
 });
+
+test('Daily cancellation is immediate when allowed and never becomes a pending approval', async () => {
+  const { service } = setup();
+  const today = new Date(Date.now() + 7 * 3600000).toISOString().slice(0, 10);
+  const reg = { status: 'confirmed' };
+  const meal = { mealDate: today, completionStatus: 'serving' };
+  const actor = { roles: ['employee'] };
+  assert.deepEqual(await service.checkCancellationPermission(reg, meal, actor), { canCancel: true, requiresApproval: false, reason: null });
+  service.systemSettingRepository = { getByKey: async () => ({ settingValue: '00:00' }) };
+  const locked = await service.checkCancellationPermission(reg, meal, actor);
+  assert.equal(locked.canCancel, false);
+  assert.equal(locked.requiresApproval, false);
+});
+
+test('Daily cuts auto-apply; range and permanent cuts wait for a decision', async () => {
+  const MealOptionService = require('../../src/services/MealOptionService');
+  for (const type of ['cancel_today', 'cancel_schedule', 'cancel_permanent']) {
+    let applied = 0, notified = 0;
+    const service = new MealOptionService({ create: async data => ({ id: 1, ...data }) }, {},
+      { notifyRoles: async () => { notified++; } }, { create: async () => {} });
+    service.syncMealRegistrations = async () => { applied++; };
+    const result = await service.create({ type, fromDate: '2099-11-02', toDate: '2099-11-02' }, { actorId: 1, roles: ['employee'] });
+    assert.equal(result.status, type === 'cancel_today' ? 'approved' : 'pending');
+    assert.equal(applied, type === 'cancel_today' ? 1 : 0);
+    assert.equal(notified, type === 'cancel_today' ? 0 : 1);
+  }
+});
