@@ -41,12 +41,13 @@ test('Management can register completed meals; employee still cannot', async () 
   }
 });
 
-test('Management can cancel completed or past meals without approval', async () => {
+test('Only administrators can cancel completed or past meals after the manager deadline', async () => {
   const { service } = setup();
-  for (const role of ['admin', 'manager']) {
+  for (const role of ['admin']) {
     const permission = await service.checkCancellationPermission({ status: 'completed' }, { mealDate: '2001-01-02', completionStatus: 'completed' }, { roles: [role] });
     assert.deepEqual(permission, { canCancel: true, requiresApproval: false, reason: null });
   }
+  await assert.rejects(service.checkCancellationPermission({ status: 'completed' }, { mealDate: '2001-01-02' }, { roles: ['manager'] }), /08:00/);
   assert.equal((await service.checkCancellationPermission({ status: 'completed' }, { mealDate: '2001-01-02', completionStatus: 'completed' }, { roles: ['employee'] })).canCancel, false);
 });
 

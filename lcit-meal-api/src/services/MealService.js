@@ -1,3 +1,4 @@
+const { assertManagerMealEditable } = require('../ultis/managerMealDeadline');
 const MEAL_STATUS = require("../constants/Meal");
 const LOG_ACTION = require("../constants/LogAction");
 const AppError = require("../ultis/AppError");
@@ -27,6 +28,7 @@ class MealService {
       throw new AppError('Chọn cơ sở hợp lệ và số suất khách từ 1 đến 1000', 400);
     }
     const meal = await this.get(id);
+    assertManagerMealEditable(meal.mealDate, actor);
     const result = await this.mealRepository.removeGuestCount(id, data.facilityId, data.count, actor.actorId);
     if (!result) throw new AppError('Số suất khách đã thay đổi, không đủ để bỏ hoặc bếp đã ngừng phục vụ. Vui lòng tải lại.', 409);
     await this.logAction(LOG_ACTION.ACTION_UPDATE, actor, `meal:${id}`, `Bỏ ${data.count} suất khách cơ sở ${data.facilityId}, ngày ${meal.mealDate}`, null, result);
@@ -39,6 +41,7 @@ class MealService {
       throw new AppError('Chọn cơ sở hợp lệ và số suất khách từ 1 đến 1000', 400);
     }
     const meal = await this.get(id);
+    assertManagerMealEditable(meal.mealDate, actor);
     const result = await this.mealRepository.addGuestCount(id, data.facilityId, data.count, actor.actorId);
     if (!result) throw new AppError('Bếp đã nghỉ hoặc ngừng phục vụ ngày này', 409);
     await this.logAction(LOG_ACTION.ACTION_UPDATE, actor, `meal:${id}`, `Thêm ${data.count} suất khách cơ sở ${data.facilityId}, ngày ${meal.mealDate}`, null, result);

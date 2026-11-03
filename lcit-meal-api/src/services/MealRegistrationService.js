@@ -1,3 +1,4 @@
+const { assertManagerMealEditable } = require('../ultis/managerMealDeadline');
 const MEAL_REGISTRATION_STATUS = require("../constants/MealRegistration");
 const MEAL_COMPLETION_STATUS = require("../constants/MealCompletionStatus");
 const ROLE = require("../constants/Role");
@@ -46,6 +47,7 @@ class MealRegistrationService {
   // Trả về object: { canCancel, requiresApproval, reason }
   async checkCancellationPermission(registration, meal, actor) {
     const { date: today, time: nowTime } = getVietnamNow();
+    assertManagerMealEditable(meal.mealDate, actor);
     const isManagement = (actor.roles || []).some((role) =>
       [ROLE.ADMIN, ROLE.MANAGER].includes(role),
     );
@@ -227,6 +229,7 @@ class MealRegistrationService {
 
     // Không cho đăng ký suất ăn của ngày đã qua (dùng chuỗi so sánh vì
     // meal_date lưu dạng DATE "YYYY-MM-DD", so sánh string là an toàn).
+    assertManagerMealEditable(meal.mealDate, actor);
     const todayStr = getVietnamNow().date;
     const isManagement = (actor.roles || []).some(role => [ROLE.ADMIN, ROLE.MANAGER].includes(role));
     if (meal.mealDate < todayStr && !isManagement) {
@@ -273,6 +276,7 @@ class MealRegistrationService {
     const newStatus = isManagement && (meal.mealDate < todayStr || meal.completionStatus === MEAL_COMPLETION_STATUS.COMPLETED)
       ? MEAL_REGISTRATION_STATUS.COMPLETED
       : MEAL_REGISTRATION_STATUS.CONFIRMED;
+    assertManagerMealEditable(meal.mealDate, actor);
     const hasGuest = guestCount > 0;
 
     const registration = existing
@@ -358,6 +362,7 @@ class MealRegistrationService {
   // Cập nhật số lượng khách của 1 đăng ký (còn ở trạng thái pending/confirmed) - chủ sở hữu hoặc admin/manager
   async update(id, data, actor = {}) {
     const registration = await this.get(id);
+    assertManagerMealEditable(registration.mealDate, actor);
 
     this.assertOwnerOrManager(registration, actor);
     this.assertNotAdminSelfService(registration.userId, actor, "sửa");
@@ -408,6 +413,7 @@ class MealRegistrationService {
   // Hoặc duyệt yêu cầu cắt suất
   async confirm(id, actor = {}) {
     const registration = await this.get(id);
+    assertManagerMealEditable(registration.mealDate, actor);
 
     if (registration.status !== MEAL_REGISTRATION_STATUS.PENDING) {
       throw new AppError("Đăng ký này không ở trạng thái chờ xác nhận", 409);
@@ -464,6 +470,7 @@ class MealRegistrationService {
   // Admin/manager duyệt yêu cầu cắt và thực hiện cắt suất (chuyển sang CANCELLED)
   async approveCancel(id, actor = {}) {
     const registration = await this.get(id);
+    assertManagerMealEditable(registration.mealDate, actor);
 
     // Chỉ admin/manager mới được duyệt
     const isManagement = (actor.roles || []).some((role) =>
@@ -514,6 +521,7 @@ class MealRegistrationService {
   // Admin/manager từ chối yêu cầu cắt (quay lại CONFIRMED)
   async rejectCancel(id, actor = {}) {
     const registration = await this.get(id);
+    assertManagerMealEditable(registration.mealDate, actor);
 
     // Chỉ admin/manager mới được từ chối
     const isManagement = (actor.roles || []).some((role) =>
@@ -630,6 +638,7 @@ class MealRegistrationService {
 
   async delete(id, actor = {}) {
     const registration = await this.get(id);
+    assertManagerMealEditable(registration.mealDate, actor);
 
     await this.mealRegistrationRepository.delete(id);
 

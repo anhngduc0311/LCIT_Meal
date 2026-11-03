@@ -15,13 +15,13 @@ test('Only management may remove guests, with valid facility and positive intege
 test('Removing guests records the facility and actor; stale counts return a conflict', async () => {
   const writes = [], logs = [];
   const service = new MealService({
-    get: async () => ({ mealDate: '2026-11-02' }),
+    get: async () => ({ mealDate: '2099-11-02' }),
     removeGuestCount: async (...args) => { writes.push(args); return { mealId: 1, facilityId: 2, guestCount: 0 }; },
   }, null, null, { create: async data => logs.push(data) });
   const actor = { actorId: 9, roles: ['manager'] };
   const result = await service.removeGuests(1, { facilityId: 2, count: 3 }, actor);
   assert.equal(result.guestCount, 0);
-  assert.equal(result.mealDate, '2026-11-02');
+  assert.equal(result.mealDate, '2099-11-02');
   assert.deepEqual(writes, [[1, 2, 3, 9]]);
   assert.equal(logs.length, 1);
   service.mealRepository.removeGuestCount = async () => null;

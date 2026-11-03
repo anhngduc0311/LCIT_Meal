@@ -32,6 +32,7 @@ import { useManagementPayments, useMarkPaid } from '../../src/hooks/useManagemen
 import { useSystemSettings } from '../../src/hooks/useManagementSettings';
 import { useFacilities } from '../../src/hooks/useFacilities';
 import { useCancellationDeadline } from '../../src/hooks/useCancellationDeadline';
+import { isCancellationClosed } from '../../src/utils/cancellationDeadline';
 import { FacilityFilter, getFacility, matchesFacility } from '../../src/utils/facilities';
 import { buildMonthlyMeals, countsAsMeal, monthRange, monthlyPaymentState, shiftMonth } from '../../src/utils/monthlyMeals';
 import { formatDisplayDate, formatCurrency } from '../../src/utils/formatters';
@@ -70,8 +71,10 @@ function MonthlyBoard() {
   const flow = narrow || height < 720 || fontScale > 1.3;
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { isMockMode } = useAuth();
-  const { today } = useCancellationDeadline();
+  const { isMockMode, role } = useAuth();
+  const { today, now } = useCancellationDeadline();
+  const mealLocked = (date: string, at = now) => role === 'manager' && isCancellationClosed(date, at);
+  const lockedMessage = 'Đã chốt suất lúc 08:00 (giờ Việt Nam). Ngày này chỉ được xem, không thể cắt suất, đăng ký lại hoặc điều chỉnh khách.';
   const params = useLocalSearchParams<{ date?: string; facility?: string }>();
   let initialDate = today;
   try {
@@ -181,6 +184,11 @@ function MonthlyBoard() {
 
   const saveCell = async () => {
     if (!action || busy.current) return;
+    if (mealLocked(action.date, Date.now())) {
+      setAction(null);
+      setNotice({ variant: 'error', message: lockedMessage });
+      return;
+    }
     const meal = table.mealsByDate.get(action.date);
     if (!meal) return;
     busy.current = true;
@@ -220,6 +228,11 @@ function MonthlyBoard() {
   const removableGuests = (date: string) => standaloneGuests.filter(item => item.mealDate === date)
     .reduce((sum, item) => sum + Number(item.guestCount), 0);
   const saveGuests = async () => {
+    if (mealLocked(guestDate, Date.now())) {
+      setGuestOpen(false);
+      setNotice({ variant: 'error', message: lockedMessage });
+      return;
+    }
     const meal = table.mealsByDate.get(guestDate);
     if (busy.current || !meal || (facility !== 1 && facility !== 2)) return;
     if (guestMode === 'remove' && guestExtra > removableGuests(guestDate)) {
@@ -556,7 +569,7 @@ function MonthlyBoard() {
                         const closed = !meal || Boolean(meal.isCancelled) || meal.status !== 'active';
                         const eating = !closed && countsAsMeal(record);
                         const pending = !closed && record?.status === 'pending';
-                        const editable = !closed && !saving;
+                        const editable = !closed && !saving && !mealLocked(date);
                         const weekday = new Date(`${date}T12:00:00Z`).getUTCDay();
 
                         return (
@@ -676,10 +689,11 @@ function MonthlyBoard() {
             <View style={styles.guestDayActions}>
               <Text style={styles.selectedDaySub}>{selectedDayStats.staff} cán bộ · {selectedDayStats.guests} khách</Text>
               <Button title="Điều chỉnh khách" size="sm" variant="outline"
-                disabled={saving || !selectedMeal || Boolean(selectedMeal.isCancelled) || selectedMeal.status !== 'active' || (facility !== 1 && facility !== 2)}
+                disabled={saving || mealLocked(selectedDate) || !selectedMeal || Boolean(selectedMeal.isCancelled) || selectedMeal.status !== 'active' || (facility !== 1 && facility !== 2)}
                 onPress={() => { setGuestMode('add'); setGuestDate(selectedDate); setGuestExtra(1); setGuestOpen(true); }} />
             </View>
             {/* Sub-filter chips for day view */}
+            {mealLocked(selectedDate) && <Text style={styles.dialogHint}>{lockedMessage}</Text>}
             <View style={styles.daySubFilterRow}>
               <TouchableOpacity
                 style={[styles.daySubChip, daySubFilter === 'all' && styles.daySubChipActive]}
@@ -716,7 +730,7 @@ function MonthlyBoard() {
               const closed = !meal || Boolean(meal.isCancelled) || meal.status !== 'active';
               const eating = !closed && countsAsMeal(record);
               const pending = !closed && record?.status === 'pending';
-              const editable = !closed && !saving;
+              const editable = !closed && !saving && !mealLocked(selectedDate);
 
               return (
                 <View key={person.id} style={styles.dayStaffRow}>
@@ -801,6 +815,7 @@ function MonthlyBoard() {
       <ConfirmDialog
         visible={Boolean(action)}
         loading={saving}
+        confirmDisabled={Boolean(action && mealLocked(action.date))}
         title={action?.eating ? 'Cắt suất ăn' : 'Đăng ký suất ăn'}
         message={
           action
@@ -837,7 +852,7 @@ function MonthlyBoard() {
               <View style={styles.actions}>
                 <Button title="Hủy" variant="secondary" disabled={saving} onPress={() => setGuestOpen(false)} style={{ flex: 1 }} />
                 <Button title={guestMode === 'remove' ? 'Xác nhận bớt' : 'Xác nhận thêm'} loading={saving}
-                  disabled={guestMode === 'remove' && (guestExtra > removableGuests(guestDate) || removableGuests(guestDate) === 0)}
+                  disabled={mealLocked(guestDate) || (guestMode === 'remove' && (guestExtra > removableGuests(guestDate) || removableGuests(guestDate) === 0))}
                   onPress={() => { void saveGuests(); }} style={{ flex: 1 }} />
               </View>
             </ScrollView>

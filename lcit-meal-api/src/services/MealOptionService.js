@@ -147,6 +147,7 @@ class MealOptionService {
   // Nhân viên tạo yêu cầu hủy ăn cho chính mình.
   // admin/manager có thể tạo hộ (truyền data.userId).
   async create(data, actor = {}) {
+    require('../ultis/managerMealDeadline').assertManagerMealEditable(data.fromDate, actor);
     this.validateCreateData(data);
     await this.assertBeforeRegistrationCutoff(data.fromDate);
 
@@ -257,6 +258,7 @@ class MealOptionService {
   // Quản lý/admin duyệt yêu cầu
   async approve(id, actor = {}) {
     const mealOption = await this.get(id);
+    require('../ultis/managerMealDeadline').assertManagerMealEditable(mealOption.fromDate, actor);
 
     if (mealOption.status !== MEAL_OPTION_STATUS.PENDING) {
       throw new AppError("Yêu cầu này đã được xử lý trước đó", 409);
