@@ -1,4 +1,4 @@
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Modal,
@@ -87,6 +87,16 @@ function MonthlyBoard() {
   const [personFilter, setPersonFilter] = useState<PersonFilterType>('all');
   const [expandedStaffIds, setExpandedStaffIds] = useState<Set<number>>(new Set());
   const [selectedDate, setSelectedDate] = useState<string>(initialDate);
+  const previousToday = useRef(today);
+  useEffect(() => {
+    const previous = previousToday.current;
+    if (today === previous) return;
+    previousToday.current = today;
+    if (selectedDate === previous) {
+      setSelectedDate(today);
+      if (month === previous.slice(0, 7)) setMonth(today.slice(0, 7));
+    }
+  }, [today, selectedDate, month]);
   const [daySubFilter, setDaySubFilter] = useState<'all' | 'eating' | 'not_eating'>('all');
 
   const [monthOpen, setMonthOpen] = useState(false);

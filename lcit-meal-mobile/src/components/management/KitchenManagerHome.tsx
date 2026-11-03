@@ -1,5 +1,5 @@
 import { useResponsiveLayout } from '../../hooks/useResponsiveLayout';
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter, type Href } from 'expo-router';
@@ -40,6 +40,12 @@ export function KitchenManagerHome() {
   const { user, role } = useAuth();
   const { today } = useCancellationDeadline();
   const [date, setDate] = useState(today);
+  const previousToday = useRef(today);
+  useEffect(() => {
+    const previous = previousToday.current;
+    previousToday.current = today;
+    setDate(selected => selected === previous ? today : selected);
+  }, [today]);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [facility, setFacility] = useState<Exclude<FacilityFilter, 'all'>>(1);
   const [refreshing, setRefreshing] = useState(false);
