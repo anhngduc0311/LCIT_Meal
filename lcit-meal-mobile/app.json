@@ -7,10 +7,14 @@
     "icon": "./assets/images/icon.png",
     "scheme": "lcitmealmobile",
     "userInterfaceStyle": "light",
+    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lcit.meal",
       "icon": "./assets/images/icon.png",
-      "supportsTablet": true
+      "supportsTablet": true,
+      "config": {
+        "usesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.lcit.meal",
@@ -45,7 +49,7 @@
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 23
+            "minSdkVersion": 24
           }
         }
       ],

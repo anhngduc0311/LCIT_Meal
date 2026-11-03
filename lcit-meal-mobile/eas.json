@@ -18,6 +18,14 @@
         "EXPO_PUBLIC_USE_MOCK": "false"
       }
     },
+    "testflight": {
+      "extends": "production",
+      "distribution": "store",
+      "autoIncrement": true,
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-26.2"
+      }
+    },
     "production": {
       "android": {
         "buildType": "app-bundle"
@@ -29,6 +37,12 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "testflight": {
+      "ios": {
+        "appleId": "akzan0311@gmail.com",
+        "ascAppId": "6824446220"
+      }
+    }
   }
 }

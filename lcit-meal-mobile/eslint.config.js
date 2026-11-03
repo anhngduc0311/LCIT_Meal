@@ -1,0 +1,7 @@
+const { defineConfig } = require('eslint/config');
+const expoConfig = require('eslint-config-expo/flat');
+
+module.exports = defineConfig([
+  expoConfig,
+  { ignores: ['dist/**', 'dist-ios/**', 'node_modules-sdk53-backup/**'] },
+]);

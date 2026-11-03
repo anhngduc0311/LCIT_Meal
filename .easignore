@@ -1,0 +1,227 @@
+# =========================================
+# Dependencies
+# =========================================
+node_modules/
+*/node_modules/
+
+# =========================================
+# Environment variables
+# =========================================
+.env
+.env.local
+.env.*.local
+.env.development
+.env.development.local
+.env.test
+.env.test.local
+.env.production
+.env.production.local
+*.env
+!*.env.example
+
+# =========================================
+# Expo & Mobile
+# =========================================
+.expo/
+*/.expo/
+dist/
+*/dist/
+web-build/
+*/web-build/
+expo-env.d.ts
+*/expo-env.d.ts
+.kotlin/
+*/.kotlin/
+
+# Native builds
+/ios/
+/android/
+*/ios/
+*/android/
+*.orig.*
+*.jks
+*.p8
+*.p12
+*.key
+*.keystore
+*.mobileprovision
+
+# Metro
+.metro-health-check*
+*/.metro-health-check*
+
+# =========================================
+# Logs
+# =========================================
+logs/
+*/logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# =========================================
+# Testing & Coverage
+# =========================================
+coverage/
+*/coverage/
+.nyc_output/
+*.lcov
+
+# =========================================
+# Cache & Build artifacts
+# =========================================
+.cache/
+*/.cache/
+.npm/
+.eslintcache
+*/.eslintcache
+.stylelintcache
+*.tsbuildinfo
+build/
+*/build/
+out/
+*/out/
+
+# =========================================
+# IDE & Editors
+# =========================================
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+.idea/
+*/.idea/
+*.iml
+*.sublime-project
+*.sublime-workspace
+
+# =========================================
+# Operating System files
+# =========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# =========================================
+# Temporary files & Swaps
+# =========================================
+*.tmp
+*.temp
+*.swp
+*.swo
+*~
+
+# =========================================
+# Database / Local SQLite data
+# =========================================
+*.sqlite
+*.sqlite3
+*.db
+
+# =========================================
+# Uploads & User Generated content
+# =========================================
+uploads/*
+!uploads/.gitkeep
+lcit-meal-api/public/uploads/*
+!lcit-meal-api/public/uploads/.gitkeep
+storage/*
+!storage/.gitkeep
+user_data/
+*/user_data/
+
+# =========================================
+# Video generation & Media production
+# =========================================
+# Video production directories & tools
+video-output/
+*/video-output/
+douyin_editor/
+*/douyin_editor/
+tts/
+*/tts/
+
+# Video script drafts
+KICH_BAN_VIDEO*.md
+kich_ban_video*.md
+
+# Video media files
+*.mp4
+*.mov
+*.avi
+*.mkv
+*.webm
+*.flv
+*.wmv
+*.m4v
+*.ts
+# TypeScript files are application source and must be included in EAS uploads.
+!lcit-meal-mobile/**/*.ts
+*.mts
+
+# Audio files (voiceovers, TTS, BGM)
+*.mp3
+*.wav
+*.aac
+*.flac
+*.m4a
+*.ogg
+*.opus
+*.wma
+
+# Subtitles & Captions
+*.srt
+*.vtt
+*.ass
+*.ssa
+*.sub
+
+# Video pipeline workspace & temporary folders
+workspace_temp/
+*/workspace_temp/
+downloads/
+*/downloads/
+output/
+*/output/
+clips/
+*/clips/
+frames/
+*/frames/
+
+# AI models & weights (Whisper, UVR, OpenVoice, etc.)
+models/
+*/models/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.bin
+
+# Python caches & build specs (from video generator scripts)
+__pycache__/
+*/__pycache__/
+*.py[cod]
+*$py.class
+*.spec
+
+
+# iOS release only: exclude unrelated applications and local artifacts.
+/lcit-meal-api/
+/deploy/
+/docs/
+/output/
+/test-results/
+/tts/
+/video-output/
+/douyin_editor/
+.git
+/expo54-modules.json
+/node_modules-sdk53-backup/
+/lcit-meal-mobile/package-lock.sdk53.backup.json
+/lcit-meal-mobile/scripts/ios-signing.ps1
+/lcit-meal-mobile/dist-ios/

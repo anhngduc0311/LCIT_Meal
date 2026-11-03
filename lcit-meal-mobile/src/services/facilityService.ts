@@ -4,7 +4,7 @@ import { STORAGE_KEYS } from '../config/constants';
 import type { FacilityId, FacilityOverrides, FacilityPerson } from '../utils/facilities';
 
 async function namespace(mock: boolean) {
-  const api = mock ? 'mock' : (await storage.getItem(STORAGE_KEYS.API_URL_OVERRIDE) || env.apiBaseUrl).replace(/\/+$/, '');
+  const api = mock ? 'mock' : String(await storage.getItem(STORAGE_KEYS.API_URL_OVERRIDE) || env.apiBaseUrl).replace(/\/+$/, '');
   // SecureStore allows only letters, digits, dots, underscores and hyphens in keys.
   return `meal_facilities_v1_${Array.from(api).map(char => char.charCodeAt(0).toString(16)).join('_')}`;
 }
