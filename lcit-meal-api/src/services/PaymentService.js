@@ -29,7 +29,7 @@ class PaymentService {
       mealRepository.filter(from, to), mealRepository.filterGuestCounts(from, to),
       this.filter(null, null, from, to), this.paymentRepository.collectionPrices(),
     ]);
-    return { users: users.map(u => ({ id: u.id, fullName: u.fullName, username: u.username })),
+    return { users: users.map(u => ({ id: u.id, fullName: u.fullName, username: u.username, facilityId: u.facilityId })),
       registrations: registrations.map(r => ({ userId: r.userId, mealDate: r.mealDate, guestCount: r.guestCount, status: r.status })),
       meals, guests, payments, settings };
   }

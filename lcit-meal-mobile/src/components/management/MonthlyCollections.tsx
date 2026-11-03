@@ -13,17 +13,21 @@ import { ErrorState } from '../states/ErrorState';
 import { EmptyState } from '../states/EmptyState';
 import { LoadingState } from '../states/LoadingState';
 import { colors } from '../../theme/colors';
+import { useFacilities } from '../../hooks/useFacilities';
+import { useCancellationDeadline } from '../../hooks/useCancellationDeadline';
 
 export function MonthlyCollections({ header }: {
   header: React.ReactNode;
 }) {
   const [month, setMonth] = useState(() => formatBusinessDate(new Date()).slice(0, 7));
   const [search, setSearch] = useState('');
+  const facilities = useFacilities();
+  const { today } = useCancellationDeadline();
   const range = monthRange(month);
   const { isMockMode } = useAuth();
   const board = useQuery({ queryKey: ['management', 'payments', 'monthly-board', month, isMockMode],
     queryFn: () => paymentService.getMonthlyBoard(month, isMockMode), refetchInterval: 60000 });
-  const loading = board.isLoading;
+  const loading = board.isLoading || facilities.isLoading;
   const error = board.error;
   const value = (key: string) => board.data?.settings.find(s => s.settingKey === key)?.settingValue;
   const price = value('meal_price') === undefined ? NaN : Number(value('meal_price'));
@@ -31,7 +35,7 @@ export function MonthlyCollections({ header }: {
   const pricesReady = [price, guestPrice].every(p => Number.isFinite(p) && p >= 0);
   const ready = !loading && !error && pricesReady;
   const summary = ready ? buildMonthlyCollections(month, board.data?.users || [], board.data?.registrations || [], board.data?.meals || [],
-    board.data?.payments || [], price, guestPrice, board.data?.guests || []) : null;
+    board.data?.payments || [], price, guestPrice, board.data?.guests || [], { facilityId: 1, throughDate: today, overrides: facilities.overrides }) : null;
   const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
   const rows = summary?.rows.filter(row => normalize(`${row.name} ${row.username}`).includes(normalize(search.trim().replace(/^@/, '')))) || [];
   const refresh = async () => { await board.refetch(); };
@@ -49,7 +53,7 @@ export function MonthlyCollections({ header }: {
           <Ionicons name="chevron-forward" size={20} color={colors.primary} />
         </TouchableOpacity>
       </View>
-      <Text style={styles.hint}>Dự kiến cuối tháng theo suất đã đăng ký, gồm các ngày sắp tới. Suất đã cắt và ngày bếp nghỉ không tính tiền.</Text>
+      <Text style={styles.hint}>Cơ sở 1 · Chỉ cộng suất trong tháng đã chọn đến ngày {formatDisplayDate(today)}. Suất đã cắt và ngày bếp nghỉ không tính tiền.</Text>
       <Text style={styles.hint}>Tự động chốt ngày {formatDisplayDate(range.to)}, sau giờ hoàn thành bữa ăn. Không cần tạo khoản thu.</Text>
       {loading ? <LoadingState /> : error || !pricesReady ? <ErrorState
         message={error instanceof Error ? error.message : 'Chưa cấu hình đủ đơn giá cán bộ và khách.'} onRetry={() => { void refresh(); }} /> : summary && <>
@@ -69,7 +73,7 @@ export function MonthlyCollections({ header }: {
         </Card>
         <Text style={styles.hint}>Đơn giá: {formatCurrency(price)}/cán bộ · {formatCurrency(guestPrice)}/khách</Text>
         <Input placeholder="Tìm tên hoặc @tài khoản..." value={search} onChangeText={setSearch} />
-        <Text style={styles.title}>Cần thu cuối tháng · {rows.length} người</Text>
+        <Text style={styles.title}>Cần thu đến hiện tại · {rows.length} người</Text>
       </>}
     </View>}
     ListEmptyComponent={ready ? <EmptyState title="Chưa có dữ liệu thu tiền" description="Không có suất ăn hoặc khoản thu phù hợp trong tháng đã chọn." /> : null}

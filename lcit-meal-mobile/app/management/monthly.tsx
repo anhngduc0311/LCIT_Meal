@@ -125,6 +125,8 @@ function MonthlyBoard() {
 
   const standaloneGuests = (mealGuests.data || []).filter(item => facility === 'all' || item.facilityId === facility);
   const table = buildMonthlyMeals(month, registrations.data || [], meals.data || [], people.map(p => p.id), pricesReady ? price : 0, pricesReady ? guestPrice : 0, standaloneGuests);
+  // Header totals accrue through today; the board still shows future bookings.
+  const summary = buildMonthlyMeals(month, registrations.data || [], (meals.data || []).filter(meal => meal.mealDate <= today), people.map(p => p.id), pricesReady ? price : 0, pricesReady ? guestPrice : 0, standaloneGuests);
   const loading = registrations.isLoading || meals.isLoading || users.isLoading || facilities.isLoading || mealGuests.isLoading;
   const error = registrations.error || meals.error || users.error || mealGuests.error;
 
@@ -334,7 +336,7 @@ function MonthlyBoard() {
             <Text style={styles.metricLabel} numberOfLines={1}>TỔNG SUẤT</Text>
           </View>
           <Text style={styles.metricValue} numberOfLines={1}>
-            {loading || error ? '—' : table.total}
+            {loading || error ? '—' : summary.total}
             <Text style={styles.unit}> suất</Text>
           </Text>
         </View>
@@ -345,7 +347,7 @@ function MonthlyBoard() {
             <Text style={[styles.metricLabel, { color: '#B45309' }]} numberOfLines={1}>DỰ KIẾN</Text>
           </View>
           <Text style={[styles.metricValue, styles.money]} numberOfLines={1} adjustsFontSizeToFit>
-            {loading || error || !pricesReady ? '—' : formatCurrency(table.amount)}
+            {loading || error || !pricesReady ? '—' : formatCurrency(summary.amount)}
           </Text>
         </View>
 
@@ -355,7 +357,7 @@ function MonthlyBoard() {
             <Text style={[styles.metricLabel, { color: '#1D4ED8' }]} numberOfLines={1}>HOÀN THÀNH</Text>
           </View>
           <Text style={[styles.metricValue, { color: '#1E3A8A' }]} numberOfLines={1}>
-            {loading || error ? '—' : table.completed}
+            {loading || error ? '—' : summary.completed}
             <Text style={styles.unit}> suất</Text>
           </Text>
         </View>

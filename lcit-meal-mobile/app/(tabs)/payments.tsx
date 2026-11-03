@@ -29,7 +29,6 @@ import { ModalCard } from '../../src/components/common/ModalCard';
 import { useResponsiveLayout } from '../../src/hooks/useResponsiveLayout';
 import { Header } from '../../src/components/common/Header';
 import { Card } from '../../src/components/common/Card';
-import { DailyMealLedger } from '../../src/components/meals/DailyMealLedger';
 import { Badge } from '../../src/components/common/Badge';
 import { Button } from '../../src/components/common/Button';
 import { EmptyState } from '../../src/components/states/EmptyState';
@@ -244,7 +243,6 @@ function PersonalPaymentsScreen() {
         </Text>
       </Card>
 
-      {summary && !summaryError && <Card padding="xl"><DailyMealLedger ledger={summary} /></Card>}
 
       {/* Bộ lọc trạng thái */}
       <View style={styles.filterRow}>

@@ -7,7 +7,7 @@ import type { Meal, MealGuestCount, MealRegistration } from './meals';
 import type { User } from './auth';
 
 export interface MonthlyCollectionBoard {
-  users: Pick<User, 'id' | 'fullName' | 'username'>[];
+  users: Pick<User, 'id' | 'fullName' | 'username' | 'facilityId'>[];
   registrations: MealRegistration[];
   meals: Meal[];
   guests: MealGuestCount[];

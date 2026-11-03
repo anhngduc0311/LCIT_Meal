@@ -110,8 +110,16 @@ const findActiveHolidayEvent = (events, dateStr) =>
  * Nếu không truyền `month`, mặc định lấy tháng hiện tại theo giờ VN.
  *
  * @param {string=} targetMonth - "YYYY-MM", mặc định = tháng hiện tại
+ * @param {{ fromDate?: string }} options - Giới hạn ngày bắt đầu khi tạo bù.
  */
-async function runAutoSchedule(targetMonth) {
+async function runAutoSchedule(targetMonth, { fromDate } = {}) {
+  if (fromDate !== undefined) {
+    const parsed = typeof fromDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)
+      ? new Date(`${fromDate}T00:00:00Z`) : null;
+    if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== fromDate) {
+      throw new Error('fromDate must be a valid YYYY-MM-DD date');
+    }
+  }
   const enabledSetting = await systemSettingRepository
     .getByKey("auto_register_enabled")
     .catch(() => null);
@@ -122,7 +130,7 @@ async function runAutoSchedule(targetMonth) {
   }
 
   const month = targetMonth || getVietnamDate().slice(0, 7);
-  const dates = getMonthRange(month);
+  const dates = getMonthRange(month).filter(date => !fromDate || date >= fromDate);
   const [
     users,
     allOptions,

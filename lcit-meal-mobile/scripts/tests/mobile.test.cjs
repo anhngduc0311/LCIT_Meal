@@ -385,6 +385,44 @@ test('Monthly collections exist before invoicing and separate staff, linked gues
   assert.throws(() => buildMonthlyCollections('2026-11', [], [], [], [], NaN, 35000), /đơn giá/);
 });
 
+test('Collections scope excludes other facilities and future meals, guests and invoices', () => {
+  const { buildMonthlyCollections } = app.load('utils/monthlyCollections.ts');
+  const users = [
+    { id: 1, fullName: 'Kim Mạnh Cường', username: 'cuong' },
+    { id: 2, fullName: 'Người cơ sở hai', username: 'hai', facilityId: 2 },
+    { id: 3, fullName: 'Vũ Lê Duy', username: 'duy' },
+  ];
+  const meals = ['2026-11-02', '2026-11-03', '2026-11-04'].map(mealDate => ({ mealDate, status: 'active' }));
+  const records = [
+    { userId: 1, mealDate: '2026-11-02', status: 'completed', guestCount: 1 },
+    { userId: 1, mealDate: '2026-11-03', status: 'cancelled', guestCount: 0 },
+    { userId: 1, mealDate: '2026-11-04', status: 'confirmed', guestCount: 3 },
+    { userId: 2, mealDate: '2026-11-03', status: 'confirmed', guestCount: 0 },
+    { userId: 3, mealDate: '2026-11-03', status: 'confirmed', guestCount: 0 },
+  ];
+  const payments = [
+    { userId: 1, paymentDate: '2026-11-02', amount: 65000, status: 'paid' },
+    { userId: 1, paymentDate: '2026-11-30', amount: 900000, status: 'unpaid' },
+    { userId: 2, paymentDate: '2026-11-03', amount: 30000, status: 'unpaid' },
+  ];
+  const guests = [
+    { facilityId: 1, mealDate: '2026-11-03', guestCount: 2 },
+    { facilityId: 1, mealDate: '2026-11-04', guestCount: 4 },
+    { facilityId: 2, mealDate: '2026-11-03', guestCount: 5 },
+  ];
+  const scope = { facilityId: 1, throughDate: '2026-11-03', overrides: { '3': { name: 'Vũ Lê Duy', facilityId: 2 } } };
+  const result = buildMonthlyCollections('2026-11', users, records, meals, payments, 30000, 35000, guests, scope);
+  assert.equal(result.rows.length, 1);
+  assert.equal(result.staffAmount, 30000);
+  assert.equal(result.linkedGuestAmount, 35000);
+  assert.equal(result.paidAmount, 65000);
+  assert.equal(result.remainingAmount, 0);
+  assert.deepEqual(result.standalone, [{ facilityId: 1, count: 2, amount: 70000 }]);
+  const future = buildMonthlyCollections('2026-12', users, records, meals, payments, 30000, 35000, guests, scope);
+  assert.equal(future.rows.length, 0);
+  assert.equal(future.remainingAmount, 0);
+});
+
 test('Monthly collections retain invoice-only people and explain invoice differences without double counting', () => {
   const { buildMonthlyCollections } = app.load('utils/monthlyCollections.ts');
   const result = buildMonthlyCollections('2028-02', [], [], [], [
