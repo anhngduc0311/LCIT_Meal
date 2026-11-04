@@ -131,6 +131,10 @@ class UserRepository {
     return true;
   }
 
+  async revokeAccessToken(id, token) {
+    await pool.query('UPDATE user SET access_token = NULL WHERE id = ? AND access_token = ?', [id, token]);
+  }
+
   // Filter users
   async filter(query, role, status) {
     let sql = `

@@ -64,10 +64,10 @@ export async function apiClient<T>(
     delete headers['Content-Type'];
   }
 
+  const requestToken = skipAuth ? null : await storage.getItem(STORAGE_KEYS.AUTH_TOKEN);
   if (!skipAuth) {
-    const token = await storage.getItem(STORAGE_KEYS.AUTH_TOKEN);
-    if (token) {
-      headers['Authorization'] = `Bearer ${token}`;
+    if (requestToken) {
+      headers['Authorization'] = `Bearer ${requestToken}`;
     }
   }
 
@@ -84,7 +84,9 @@ export async function apiClient<T>(
 
     // Xử lý 401 Unauthorized
     if (response.status === 401 && !skipAuth) {
-      onUnauthorizedCallback?.();
+      // A delayed response from an old session must never log out a new one.
+      const currentToken = await storage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+      if (requestToken && currentToken === requestToken) onUnauthorizedCallback?.();
       throw new ApiError(401, 'Phiên đăng nhập đã hết hạn. Vui lòng đăng nhập lại.');
     }
 

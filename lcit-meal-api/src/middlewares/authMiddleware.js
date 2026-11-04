@@ -1,10 +1,12 @@
 const jwt = require("jsonwebtoken");
 
 const UserRepository = require("../repos/UserRepository");
+const AuthSessionRepository = require('../repos/AuthSessionRepository');
 const ApiResponse = require("../ultis/ApiResponse");
 const USER_STATUS = require("../constants/UserStatus");
 
 const userRepository = new UserRepository();
+const sessionRepository = new AuthSessionRepository();
 
 /**
  * Middleware xác thực (Authentication).
@@ -45,7 +47,7 @@ const authMiddleware = async (req, res, next) => {
       return ApiResponse.error(res, "Tài khoản không hoạt động", 401);
     }
 
-    if (user.accessToken !== token) {
+    if (user.accessToken !== token && !await sessionRepository.exists(user.id, token)) {
       return ApiResponse.error(res, "Token đã bị thu hồi", 401);
     }
 

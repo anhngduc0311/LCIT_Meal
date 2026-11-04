@@ -1,14 +1,17 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
+const crypto = require('node:crypto');
+const AuthSessionRepository = require('../repos/AuthSessionRepository');
 
 const USER_STATUS = require("../constants/UserStatus");
 const LOG_ACTION = require("../constants/LogAction");
 const AppError = require("../ultis/AppError");
 
 class AuthService {
-  constructor(userRepository, auditLogService) {
+  constructor(userRepository, auditLogService, sessionRepository = new AuthSessionRepository()) {
     this.userRepository = userRepository;
     this.auditLogService = auditLogService;
+    this.sessionRepository = sessionRepository;
   }
 
   async login(username, password, meta = {}) {
@@ -35,10 +38,8 @@ class AuthService {
 
     const accessToken = this.generateAccessToken(user);
 
-    // Lưu access token vào DB để authMiddleware có thể xác thực
-    // và để có thể thu hồi token khi logout.
-    await this.userRepository.updateAccessToken(user.id, accessToken);
-    user.accessToken = accessToken;
+    // A new login must not replace the session on another phone/browser.
+    await this.sessionRepository.create(user.id, accessToken);
 
     await this.logLoginAttempt(user.id, `user:${user.id}`, "success", meta);
 
@@ -58,14 +59,17 @@ class AuthService {
     }
   }
 
-  async logout(userId) {
+  async logout(userId, token) {
     const user = await this.userRepository.get(userId);
 
     if (!user) {
       throw new AppError("Người dùng không tồn tại", 404);
     }
 
-    await this.userRepository.updateAccessToken(userId, null);
+    if (!token) throw new AppError('Token không tồn tại', 401);
+    await this.sessionRepository.revoke(userId, token);
+    // Preserve pre-upgrade sessions until that device explicitly logs out.
+    await this.userRepository.revokeAccessToken(userId, token);
 
     return true;
   }
@@ -75,6 +79,7 @@ class AuthService {
       {
         id: user.id,
         username: user.username,
+        jti: crypto.randomUUID(),
       },
 
       process.env.JWT_SECRET,

@@ -8,6 +8,16 @@ process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
 // Exercise the real middleware without a database connection.
 let currentUser;
 let repositoryError;
+const sessions = new Map();
+const sessionRepositoryPath = require.resolve('../../src/repos/AuthSessionRepository');
+require.cache[sessionRepositoryPath] = {
+  id: sessionRepositoryPath, filename: sessionRepositoryPath, loaded: true,
+  exports: class {
+    async create(id, token) { sessions.set(token, id); }
+    async exists(id, token) { return sessions.has(token) && sessions.get(token) === id; }
+    async revoke(id, token) { if (sessions.get(token) === id) sessions.delete(token); }
+  },
+};
 const repositoryPath = require.resolve('../../src/repos/UserRepository');
 require.cache[repositoryPath] = {
   id: repositoryPath,
@@ -62,13 +72,36 @@ test('Logout still revokes a persistent session', async () => {
   currentUser = { id: 1, status: USER_STATUS.STATUS_ACTIVE, accessToken: token };
   const service = new AuthService({
     async get() { return currentUser; },
-    async updateAccessToken(id, value) { currentUser.accessToken = value; },
+    async revokeAccessToken(id, value) { if (currentUser.accessToken === value) currentUser.accessToken = null; },
   });
   assert.equal((await authenticate(token)).accepted, true);
-  await service.logout(1);
+  await service.logout(1, token);
   const result = await authenticate(token);
   assert.equal(result.accepted, false);
   assert.equal(result.res.statusCode, 401);
+});
+
+test('Independent logins preserve legacy and other device sessions; logout revokes only its token', async () => {
+  const bcrypt = require('bcrypt');
+  const legacy = jwt.sign({ id: 1, exp: 1 }, process.env.JWT_SECRET);
+  currentUser = { id: 1, username: 'employee', status: USER_STATUS.STATUS_ACTIVE,
+    accessToken: legacy, passwordHash: await bcrypt.hash('test-password', 4) };
+  const service = new AuthService({
+    async get() { return currentUser; },
+    async getByUsername() { return currentUser; },
+    async revokeAccessToken(id, value) { if (currentUser.accessToken === value) currentUser.accessToken = null; },
+  }, { async create() {} });
+  const first = (await service.login('employee', 'test-password')).accessToken;
+  const second = (await service.login('employee', 'test-password')).accessToken;
+  assert.notEqual(first, second);
+  for (const token of [legacy, first, second]) assert.equal((await authenticate(token)).accepted, true);
+  await service.logout(1, second);
+  assert.equal((await authenticate(second)).res.statusCode, 401);
+  assert.equal((await authenticate(first)).accepted, true);
+  assert.equal((await authenticate(legacy)).accepted, true);
+  await service.logout(1, legacy);
+  assert.equal((await authenticate(legacy)).res.statusCode, 401);
+  assert.equal((await authenticate(first)).accepted, true);
 });
 
 test('Invalid signatures, locked accounts and replaced tokens are rejected', async () => {

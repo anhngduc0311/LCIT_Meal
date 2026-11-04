@@ -24,7 +24,7 @@ class AuthController {
 
   logout = async (req, res, next) => {
     try {
-        await this.authService.logout(req.user.id);
+        await this.authService.logout(req.user.id, req.token);
         return ApiResponse.success(res, null);
     }
     catch (error) {

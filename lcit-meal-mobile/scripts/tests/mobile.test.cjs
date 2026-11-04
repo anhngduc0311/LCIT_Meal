@@ -232,11 +232,38 @@ test('Login 401 preserves server message without expiring another session', asyn
   assert.equal(called, false);
 });
 test('Protected 401 invokes session expiry callback', async () => {
+  await app.storage.setItem(keys.AUTH_TOKEN, 'current-session');
   let called = 0;
   client.registerUnauthorizedCallback(() => { called++; });
   global.fetch = async () => respond(401, { success: false });
   await assert.rejects(client.apiClient('/meals'), { code: 401 });
   assert.equal(called, 1);
+});
+test('A delayed 401 from an old token does not expire the newly logged-in session', async () => {
+  let called = 0;
+  client.registerUnauthorizedCallback(() => { called++; });
+  await app.storage.setItem(keys.AUTH_TOKEN, 'old-session');
+  global.fetch = async () => {
+    await app.storage.setItem(keys.AUTH_TOKEN, 'new-session');
+    return respond(401, { success: false });
+  };
+  await assert.rejects(client.apiClient('/meals'), { code: 401 });
+  assert.equal(called, 0);
+  assert.equal(await app.storage.getItem(keys.AUTH_TOKEN), 'new-session');
+});
+
+test('Missing tokens, offline and server errors preserve the saved session', async () => {
+  let called = 0;
+  client.registerUnauthorizedCallback(() => { called++; });
+  global.fetch = async () => respond(401, { success: false });
+  await assert.rejects(client.apiClient('/meals'), { code: 401 });
+  await app.storage.setItem(keys.AUTH_TOKEN, 'current-session');
+  global.fetch = async () => { throw new TypeError('offline'); };
+  await assert.rejects(client.apiClient('/meals'), { code: 0 });
+  global.fetch = async () => respond(503, { success: false });
+  await assert.rejects(client.apiClient('/meals'), { code: 503 });
+  assert.equal(called, 0);
+  assert.equal(await app.storage.getItem(keys.AUTH_TOKEN), 'current-session');
 });
 for (const status of [403, 409, 500]) {
   test(`API preserves server error ${status}`, async () => {
