@@ -529,11 +529,6 @@ function MonthlyBoard() {
                   </View>
                   <View style={styles.staffStatDivider} />
                   <View style={styles.staffStatItem}>
-                    <Text style={styles.staffStatLabel}>Khách đi kèm</Text>
-                    <Text style={styles.staffStatVal}>{stats.guests} <Text style={styles.staffStatUnit}>khách</Text></Text>
-                  </View>
-                  <View style={styles.staffStatDivider} />
-                  <View style={styles.staffStatItem}>
                     <Text style={styles.staffStatLabel}>Dự kiến tiền</Text>
                     <Text style={styles.staffStatValMoney}>
                       {pricesReady ? (stats.amount || 0).toLocaleString('vi-VN') : '—'} <Text style={styles.staffStatUnit}>đ</Text>
@@ -703,7 +698,6 @@ function MonthlyBoard() {
                 onPress={() => { setGuestMode('add'); setGuestDate(selectedDate); setGuestExtra(1); setGuestOpen(true); }} />
             </View>
             {/* Sub-filter chips for day view */}
-            {mealLocked(selectedDate) && <Text style={styles.dialogHint}>{lockedMessage}</Text>}
             <View style={styles.daySubFilterRow}>
               <TouchableOpacity
                 style={[styles.daySubChip, daySubFilter === 'all' && styles.daySubChipActive]}
@@ -816,7 +810,6 @@ function MonthlyBoard() {
         </View>
 
         <Text style={styles.footnote}>
-          Admin/quản lý có thể cắt và đăng ký lại không giới hạn thời gian.{'\n'}
           Đơn giá: {pricesReady ? `${formatCurrency(price)}/cán bộ · ${formatCurrency(guestPrice)}/khách` : 'Đang tải đơn giá...'}
         </Text>
       </View>

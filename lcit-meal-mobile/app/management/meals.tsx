@@ -6,7 +6,7 @@ import { ModalBackdrop } from '../../src/components/common/ModalBackdrop';
  * TỐI ƯU HÓA: FlatList virtualization mượt mà & DatePickerInput chọn ngày trực quan.
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -25,6 +25,8 @@ import { Badge } from '../../src/components/common/Badge';
 import { Button } from '../../src/components/common/Button';
 import { Input } from '../../src/components/common/Input';
 import { DatePickerInput } from '../../src/components/common/DatePickerInput';
+import { DatePickerModal } from '../../src/components/common/DatePickerModal';
+import { useCancellationDeadline } from '../../src/hooks/useCancellationDeadline';
 import { ConfirmDialog } from '../../src/components/common/ConfirmDialog';
 import { ForbiddenState } from '../../src/components/states/ForbiddenState';
 import { EmptyState } from '../../src/components/states/EmptyState';
@@ -51,6 +53,22 @@ export default function ManagementMealsScreen() {
   const router = useRouter();
   const { user, role } = useAuth();
   const [activeTab, setActiveTab] = useState<'meals' | 'holidays'>('meals');
+  const { today } = useCancellationDeadline();
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [datePickerOpen, setDatePickerOpen] = useState(false);
+  const previousToday = useRef(today);
+  useEffect(() => {
+    const previous = previousToday.current;
+    previousToday.current = today;
+    setSelectedDate(date => date === previous ? today : date);
+  }, [today]);
+  const changeDay = (offset: number) => {
+    setSelectedDate(date => {
+      const next = new Date(`${date}T12:00:00Z`);
+      next.setUTCDate(next.getUTCDate() + offset);
+      return next.toISOString().slice(0, 10);
+    });
+  };
   const [refreshing, setRefreshing] = useState(false);
 
   // Meal Modals state
@@ -76,6 +94,7 @@ export default function ManagementMealsScreen() {
   const hasAccess = role === 'admin' || role === 'manager';
 
   const { data: meals = [], isLoading: isLoadingMeals, refetch: refetchMeals } = useManagementMeals();
+  const selectedMeals = meals.filter(meal => formatBusinessDate(meal.mealDate) === selectedDate);
   const { data: holidays = [], isLoading: isLoadingHolidays, refetch: refetchHolidays } = useHolidayEvents();
   const { data: mealSummary, isLoading: isLoadingSummary } = useMealSummary(summaryMealId || 0);
 
@@ -97,6 +116,7 @@ export default function ManagementMealsScreen() {
       mealDate: mealDateInput.trim(),
       note: mealNoteInput.trim() || undefined,
     });
+    setSelectedDate(mealDateInput.trim());
     setIsCreateMealOpen(false);
     setMealDateInput('');
     setMealNoteInput('');
@@ -268,13 +288,10 @@ export default function ManagementMealsScreen() {
 
   const handleOpenCreate = () => {
     if (activeTab === 'meals') {
-      const tomorrow = new Date();
-      tomorrow.setDate(tomorrow.getDate() + 1);
-      setMealDateInput(formatBusinessDate(tomorrow));
+      setMealDateInput(selectedDate);
       setMealNoteInput('');
       setIsCreateMealOpen(true);
     } else {
-      const today = formatBusinessDate(new Date());
       setHolidayFromInput(today);
       setHolidayToInput(today);
       setHolidayNameInput('');
@@ -307,7 +324,7 @@ export default function ManagementMealsScreen() {
               color={activeTab === 'meals' ? colors.primaryDark : colors.textMuted}
             />
             <Text style={[styles.tabBtnText, activeTab === 'meals' && styles.tabBtnTextActive]}>
-              Lịch nấu ăn ({meals.length})
+              Lịch nấu ăn
             </Text>
           </TouchableOpacity>
 
@@ -327,6 +344,27 @@ export default function ManagementMealsScreen() {
           </TouchableOpacity>
         </View>
       </View>
+      {activeTab === 'meals' && (
+        <View style={styles.dayFilter}>
+          <View style={styles.dayNavigation}>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Xem ngày bếp trước" onPress={() => changeDay(-1)} style={styles.dayArrow}>
+              <Ionicons name="chevron-back" size={22} color={colors.primary} />
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Chọn ngày xem lịch bếp" onPress={() => setDatePickerOpen(true)} style={styles.daySelect}>
+              <Text style={styles.dayHint}>{selectedDate === today ? 'Hôm nay' : 'Ngày đang xem'}</Text>
+              <View style={styles.dayLabel}>
+                <Ionicons name="calendar-outline" size={17} color={colors.primary} />
+                <Text style={styles.dayValue}>{formatBusinessDateDisplay(selectedDate)}</Text>
+                <Ionicons name="chevron-down" size={15} color={colors.primary} />
+              </View>
+            </TouchableOpacity>
+            <TouchableOpacity accessibilityRole="button" accessibilityLabel="Xem ngày bếp tiếp theo" onPress={() => changeDay(1)} style={styles.dayArrow}>
+              <Ionicons name="chevron-forward" size={22} color={colors.primary} />
+            </TouchableOpacity>
+          </View>
+          {selectedDate !== today && <Button title="Về hôm nay" variant="ghost" size="sm" onPress={() => setSelectedDate(today)} />}
+        </View>
+      )}
     </View>
   );
 
@@ -334,14 +372,14 @@ export default function ManagementMealsScreen() {
     <ScreenContainer scrollable={false} backgroundColor={colors.background}>
       {activeTab === 'meals' ? (
         <FlatList
-          data={meals}
+          data={selectedMeals}
           keyExtractor={(item) => String(item.id)}
           renderItem={renderMealItem}
           ListHeaderComponent={ListHeader}
           ListEmptyComponent={
             <EmptyState
-              title="Chưa có ngày bếp nào"
-              description="Bấm nút dấu cộng ở góc dưới bên phải để tạo ngày bếp mới."
+              title={`Chưa có lịch bếp ngày ${formatBusinessDateDisplay(selectedDate)}`}
+              description="Chọn ngày khác để xem hoặc bấm dấu cộng để tạo lịch bếp cho ngày này."
             />
           }
           showsVerticalScrollIndicator={false}
@@ -373,6 +411,9 @@ export default function ManagementMealsScreen() {
           windowSize={5}
         />
       )}
+
+      {datePickerOpen && <DatePickerModal visible mode="single" initialDate={selectedDate}
+        title="Chọn ngày xem lịch bếp" onSelectSingle={setSelectedDate} onClose={() => setDatePickerOpen(false)} />}
 
       {/* Nút Thêm Ngày Bếp / Nghỉ Lễ ở góc dưới bên phải (Floating Action Button) */}
       <TouchableOpacity
@@ -651,6 +692,14 @@ export default function ManagementMealsScreen() {
 }
 
 const styles = StyleSheet.create({
+  dayFilter: { marginTop: spacing.sm, marginBottom: spacing.md },
+  dayNavigation: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface,
+    borderWidth: 1, borderColor: colors.border, borderRadius: radius.lg },
+  dayArrow: { width: 48, minHeight: 64, alignItems: 'center', justifyContent: 'center' },
+  daySelect: { flex: 1, alignItems: 'center', paddingVertical: spacing.sm },
+  dayHint: { fontSize: 12, color: colors.textSecondary, marginBottom: 4 },
+  dayLabel: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  dayValue: { fontSize: 16, fontWeight: '700', color: colors.primaryDark },
   scrollContent: {
     padding: spacing.md,
     paddingBottom: 88,

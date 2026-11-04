@@ -60,7 +60,6 @@ export function MonthlyCollections({ header }: {
         <Card padding="md">
           <Text style={styles.title}>Khoản thu theo cán bộ</Text>
           <View style={styles.line}><Text style={styles.label}>Tiền suất cán bộ</Text><Text style={styles.value}>{formatCurrency(summary.staffAmount)}</Text></View>
-          <View style={styles.line}><Text style={styles.label}>Tiền khách đi kèm</Text><Text style={styles.guestValue}>{formatCurrency(summary.linkedGuestAmount)}</Text></View>
           <View style={styles.line}><Text style={styles.label}>Đã thu</Text><Text style={styles.value}>{formatCurrency(summary.paidAmount)}</Text></View>
           <View style={styles.line}><Text style={styles.title}>Còn cần thu</Text><Text style={styles.amount}>{formatCurrency(summary.remainingAmount)}</Text></View>
         </Card>
@@ -81,7 +80,7 @@ export function MonthlyCollections({ header }: {
       <Text style={styles.title}>{item.name}</Text>
       {item.username ? <Text style={styles.hint}>@{item.username}</Text> : null}
       <View style={styles.line}><Text style={styles.label}>Cán bộ · {item.staff} suất</Text><Text style={styles.value}>{formatCurrency(item.staffAmount)}</Text></View>
-      <View style={styles.line}><Text style={styles.label}>Khách đi kèm · {item.guests} suất</Text><Text style={styles.guestValue}>{formatCurrency(item.guestAmount)}</Text></View>
+      {item.guests > 0 && <View style={styles.line}><Text style={styles.label}>Khách đi kèm · {item.guests} suất</Text><Text style={styles.guestValue}>{formatCurrency(item.guestAmount)}</Text></View>}
       {item.adjustmentAmount > 0 && <View style={styles.line}><Text style={styles.label}>Chênh lệch khoản thu đã lập</Text><Text style={styles.value}>{formatCurrency(item.adjustmentAmount)}</Text></View>}
       <View style={styles.line}><Text style={styles.label}>Đã thu</Text><Text style={styles.value}>{formatCurrency(item.paidAmount)}</Text></View>
       <View style={styles.line}><Text style={styles.title}>Còn cần thu</Text><Text style={styles.amount}>{formatCurrency(item.remainingAmount)}</Text></View>
