@@ -38,20 +38,18 @@ async function main() {
     });
     return result;
   }
-  for (const token of [legacy, first, second]) assert.equal(await accepted(token), true);
-  const [rows] = await pool.query('SELECT token_hash FROM auth_session WHERE user_id = ?', [id]);
-  assert.equal(rows.length, 2);
-  assert.ok(rows.every(row => /^[a-f0-9]{64}$/.test(row.token_hash)));
+  assert.equal(await accepted(legacy), false);
+  assert.equal(await accepted(first), false);
+  assert.equal(await accepted(second), true);
+  assert.equal(jwt.verify(second, process.env.JWT_SECRET, {
+    clockTimestamp: Math.floor(Date.now() / 1000) + 100 * 365 * 86400,
+  }).exp, undefined);
+  await service.logout(id, legacy);
+  await service.logout(id, first);
+  assert.equal(await accepted(second), true);
   await service.logout(id, second);
   assert.equal(await accepted(second), false);
-  assert.equal(await accepted(first), true);
-  assert.equal(await accepted(legacy), true);
-  await service.logout(id, legacy);
-  assert.equal(await accepted(legacy), false);
-  assert.equal(await accepted(first), true);
-  await service.logout(id, first);
-  assert.equal(await accepted(first), false);
-  console.log('PostgreSQL auth integration passed: independent persistent sessions, legacy compatibility, hashed tokens, per-device logout.');
+  console.log('PostgreSQL auth integration passed: newest-device-only login, no expiry, delayed old logout cannot revoke the new session.');
 }
 
 main().catch(error => { console.error(error); process.exitCode = 1; }).finally(async () => {
