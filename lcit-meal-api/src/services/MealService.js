@@ -82,7 +82,16 @@ class MealService {
       throw new AppError("Bếp ăn không tồn tại", 404);
     }
 
-    return summary;
+    const closed = summary.isCancelled || summary.status !== 'active';
+    const totalRegistrations = closed ? 0 : Number(summary.registeredCount) || 0;
+    const totalGuests = closed ? 0 : Number(summary.guestCountTotal) || 0;
+    return {
+      ...summary,
+      meal: summary,
+      totalRegistrations,
+      totalGuests,
+      totalMealSlots: totalRegistrations + totalGuests,
+    };
   }
 
   async create(data, actor = {}) {
