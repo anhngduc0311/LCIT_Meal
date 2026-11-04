@@ -167,8 +167,6 @@ export default function MealOptionsScreen() {
       )}
 
       {/* Tab Switcher */}
-      {hasPendingRequest && <ResultBanner variant="error"
-        message="Bạn đang có yêu cầu cắt suất chờ duyệt. Vui lòng chờ quản lý duyệt hoặc từ chối trước khi gửi yêu cầu tiếp." />}
       <View style={styles.tabSwitcher}>
         <TouchableOpacity
           activeOpacity={0.7}
