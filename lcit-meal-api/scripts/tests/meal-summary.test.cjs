@@ -29,3 +29,31 @@ test('Empty and cancelled meal summaries show zero rather than blank values', as
 test('A missing meal remains a 404 response', async () => {
   await assert.rejects(new MealService({ async getSummary() { return null; } }).getSummary(99), { statusCode: 404 });
 });
+
+test('The daily modal uses site-one totals instead of the 45 agency-wide registrations', async () => {
+  const meal = new Meal({ id: 7, meal_date: '2026-11-04', status: 'active', is_cancelled: 0,
+    registered_count: 45, guest_count_total: 12 });
+  const service = new MealService({ async getSummary() { return meal; } }, null, null, null, {
+    async getKitchenStaff(date, facility) {
+      assert.equal(date, '2026-11-04'); assert.equal(facility, 1);
+      return { registered_staff_count: 25, total_guest_count: 0 };
+    },
+  });
+  const result = await service.getSummary(7, 1);
+  assert.equal(result.totalRegistrations, 25);
+  assert.equal(result.totalGuests, 0);
+  assert.equal(result.totalMealSlots, 25);
+  assert.equal(result.meal.registeredCount, 25);
+  assert.equal(result.registeredCount, 25);
+  assert.equal(result.facilityId, 1);
+});
+
+test('The management summary endpoint always requests site one for the current modal', async () => {
+  const Controller = require('../../src/controllers/MealController');
+  let called = false;
+  const controller = new Controller({ async getSummary(id, facility) {
+    assert.equal(id, '7'); assert.equal(facility, 1); called = true; return {};
+  } });
+  await controller.summary({ params: { id: '7' } }, { status() { return this; }, json() {} }, error => { throw error; });
+  assert.equal(called, true);
+});

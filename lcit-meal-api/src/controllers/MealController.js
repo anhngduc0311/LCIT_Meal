@@ -71,7 +71,7 @@ class MealController {
   // Số suất ăn cần chuẩn bị trong ngày (join bảng trung gian meal_registration)
   summary = async (req, res, next) => {
     try {
-      const summary = await this.mealService.getSummary(req.params.id);
+      const summary = await this.mealService.getSummary(req.params.id, 1);
 
       return ApiResponse.success(res, summary);
     } catch (error) {

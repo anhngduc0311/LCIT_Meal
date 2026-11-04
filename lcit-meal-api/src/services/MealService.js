@@ -9,11 +9,13 @@ class MealService {
     mealRegistrationRepository,
     notificationService,
     auditLogService,
+    facilitySummaryRepository,
   ) {
     this.mealRepository = mealRepository;
     this.mealRegistrationRepository = mealRegistrationRepository;
     this.notificationService = notificationService;
     this.auditLogService = auditLogService;
+    this.facilitySummaryRepository = facilitySummaryRepository;
   }
 
   async list() {
@@ -75,7 +77,7 @@ class MealService {
   }
 
   // Tổng hợp số suất ăn cần chuẩn bị cho 1 ngày (join bảng trung gian meal_registration)
-  async getSummary(id) {
+  async getSummary(id, facilityId) {
     const summary = await this.mealRepository.getSummary(id);
 
     if (!summary) {
@@ -83,11 +85,17 @@ class MealService {
     }
 
     const closed = summary.isCancelled || summary.status !== 'active';
-    const totalRegistrations = closed ? 0 : Number(summary.registeredCount) || 0;
-    const totalGuests = closed ? 0 : Number(summary.guestCountTotal) || 0;
+    const scoped = !closed && facilityId
+      ? await (this.facilitySummaryRepository || new (require('../repos/DashboardRepository'))())
+        .getKitchenStaff(summary.mealDate, facilityId)
+      : null;
+    const totalRegistrations = closed ? 0 : Number(scoped?.registered_staff_count ?? summary.registeredCount) || 0;
+    const totalGuests = closed ? 0 : Number(scoped?.total_guest_count ?? summary.guestCountTotal) || 0;
+    const meal = { ...summary, registeredCount: totalRegistrations, guestCountTotal: totalGuests };
     return {
-      ...summary,
-      meal: summary,
+      ...meal,
+      meal,
+      facilityId,
       totalRegistrations,
       totalGuests,
       totalMealSlots: totalRegistrations + totalGuests,
