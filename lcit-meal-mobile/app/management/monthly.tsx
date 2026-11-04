@@ -72,9 +72,9 @@ function MonthlyBoard() {
   const router = useRouter();
   const queryClient = useQueryClient();
   const { isMockMode, role } = useAuth();
-  const { today, now } = useCancellationDeadline();
-  const mealLocked = (date: string, at = now) => role === 'manager' && isCancellationClosed(date, at);
-  const lockedMessage = 'Đã chốt suất lúc 08:00 (giờ Việt Nam). Ngày này chỉ được xem, không thể cắt suất, đăng ký lại hoặc điều chỉnh khách.';
+  const { today, now } = useCancellationDeadline(undefined, '08:20');
+  const mealLocked = (date: string, at = now) => role === 'manager' && isCancellationClosed(date, at, '08:20');
+  const lockedMessage = 'Đã chốt suất lúc 08:20 (giờ Việt Nam). Ngày này chỉ được xem, không thể cắt suất, đăng ký lại hoặc điều chỉnh khách.';
   const params = useLocalSearchParams<{ date?: string; facility?: string }>();
   let initialDate = today;
   try {

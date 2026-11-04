@@ -47,7 +47,7 @@ test('Only administrators can cancel completed or past meals after the manager d
     const permission = await service.checkCancellationPermission({ status: 'completed' }, { mealDate: '2001-01-02', completionStatus: 'completed' }, { roles: [role] });
     assert.deepEqual(permission, { canCancel: true, requiresApproval: false, reason: null });
   }
-  await assert.rejects(service.checkCancellationPermission({ status: 'completed' }, { mealDate: '2001-01-02' }, { roles: ['manager'] }), /08:00/);
+  await assert.rejects(service.checkCancellationPermission({ status: 'completed' }, { mealDate: '2001-01-02' }, { roles: ['manager'] }), /08:20/);
   assert.equal((await service.checkCancellationPermission({ status: 'completed' }, { mealDate: '2001-01-02', completionStatus: 'completed' }, { roles: ['employee'] })).canCancel, false);
 });
 

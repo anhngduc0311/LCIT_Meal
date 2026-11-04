@@ -7,10 +7,10 @@ export function vietnamToday(now = Date.now()): string {
   return new Date(now + VIETNAM_OFFSET).toISOString().slice(0, 10);
 }
 
-export function isCancellationClosed(date: string | undefined, now = Date.now()): boolean {
+export function isCancellationClosed(date: string | undefined, now = Date.now(), cutoffTime = '08:00'): boolean {
   const day = formatBusinessDate(date);
   if (!day) return true;
-  const deadline = Date.parse(`${day}T08:00:00+07:00`);
+  const deadline = Date.parse(`${day}T${cutoffTime}:00+07:00`);
   return !Number.isFinite(deadline) || now >= deadline;
 }
 
@@ -18,9 +18,9 @@ export function assertCancellationAllowed(date: string | undefined, now = Date.n
   if (isCancellationClosed(date, now)) throw new Error(CANCELLATION_CLOSED_MESSAGE);
 }
 
-export function nextCancellationClockChange(now = Date.now()): number {
+export function nextCancellationClockChange(now = Date.now(), cutoffTime = '08:00'): number {
   const today = vietnamToday(now);
-  const cutoff = Date.parse(`${today}T08:00:00+07:00`);
+  const cutoff = Date.parse(`${today}T${cutoffTime}:00+07:00`);
   const midnight = Date.parse(`${today}T00:00:00+07:00`) + 24 * 60 * 60 * 1000;
   return now < cutoff ? cutoff : midnight;
 }

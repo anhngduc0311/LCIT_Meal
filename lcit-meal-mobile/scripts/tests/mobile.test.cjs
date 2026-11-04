@@ -74,6 +74,19 @@ test('Cancellation closes exactly at 08:00 Vietnam time, independently of device
   assert.equal(deadline.nextCancellationClockChange(Date.parse('2026-10-23T01:00:00Z')), Date.parse('2026-10-23T17:00:00Z'));
 });
 
+test('Management has until 08:20 while personal cancellation still closes at 08:00', () => {
+  const deadline = app.load('utils/cancellationDeadline.ts');
+  const before = Date.parse('2026-11-04T08:19:59.999+07:00');
+  const cutoff = before + 1;
+  assert.equal(deadline.isCancellationClosed('2026-11-04', before, '08:20'), false);
+  assert.equal(deadline.isCancellationClosed('2026-11-04', cutoff, '08:20'), true);
+  assert.equal(deadline.isCancellationClosed('2026-11-04', before), true);
+  assert.equal(deadline.isCancellationClosed('2026-11-03', before, '08:20'), true);
+  assert.equal(deadline.isCancellationClosed('2026-11-05', cutoff, '08:20'), false);
+  assert.equal(deadline.nextCancellationClockChange(before, '08:20'), cutoff);
+  assert.equal(deadline.nextCancellationClockChange(cutoff, '08:20'), Date.parse('2026-11-05T00:00:00+07:00'));
+});
+
 test('Cancellation service rechecks cutoff after reading the meal, so an old dialog cannot submit late', async () => {
   const { mealService } = app.load('services/mealService.ts');
   const originalNow = Date.now;
