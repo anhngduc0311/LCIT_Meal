@@ -71,7 +71,25 @@ const mealRepository = new (require('./MealRepository'))();
 async function guestsForDate(date) {
   return (await mealRepository.filterGuestCounts(date, date)).reduce((sum, item) => sum + Number(item.guestCount), 0);
 }
-async function withGuestChart(rows, start, end, monthly = false) {
+async function scopeChartStaff(rows, start, end, facilityId, monthly = false) {
+  if (facilityId === undefined) return rows;
+  const [registrations] = await pool.query(`SELECT DATE_FORMAT(m.meal_date, '%Y-%m-%d') AS meal_date,
+    u.full_name, u.facility_id, mr.guest_count FROM meal_registration mr
+    JOIN meal m ON m.id=mr.meal_id JOIN user u ON u.id=mr.user_id
+    WHERE m.meal_date BETWEEN ? AND ? AND m.status='active' AND m.is_cancelled=0
+      AND mr.status='completed'`, [start,end]);
+  const totals = new Map();
+  for (const record of registrations) {
+    if (userFacility(record) !== (facilityId === 'unassigned' ? null : facilityId)) continue;
+    const key = monthly ? record.meal_date.slice(0,7) : record.meal_date;
+    const point = totals.get(key) || { registered_staff_count: 0, total_meal_slots: 0 };
+    point.registered_staff_count++;
+    point.total_meal_slots += 1 + Math.max(0,Number(record.guest_count) || 0);
+    totals.set(key,point);
+  }
+  return rows.map(row => ({ ...row, ...(totals.get(row.meal_date) || { registered_staff_count: 0, total_meal_slots: 0 }) }));
+}
+async function withGuestChart(rows, start, end, monthly = false, facilityId) {
   const [guests, [settings]] = await Promise.all([
     mealRepository.filterGuestCounts(start, end),
     pool.query("SELECT setting_value FROM system_setting WHERE setting_key='meal_completion_time'"),
@@ -81,6 +99,7 @@ async function withGuestChart(rows, start, end, monthly = false) {
   const completedToday = time >= (settings[0]?.setting_value || '12:00');
   const amounts = new Map();
   for (const guest of guests) {
+    if (facilityId !== undefined && guest.facilityId !== facilityId) continue;
     if (guest.mealDate > today || (guest.mealDate === today && !completedToday)) continue;
     const key = monthly ? guest.mealDate.slice(0, 7) : guest.mealDate;
     amounts.set(key, (amounts.get(key) || 0) + Number(guest.guestCount));
@@ -196,7 +215,7 @@ class DashboardRepository {
   // chỉ khác ở chỗ khoảng ngày [startDate, endDate] được truyền vào thay vì
   // luôn cố định 7 ngày gần nhất. Cũng chỉ đếm suất ăn "completed" (xem giải
   // thích ở getWeeklyChart()).
-  async getChartByDayRange(startDate, endDate) {
+  async getChartByDayRange(startDate, endDate, facilityId) {
     const [rows] = await pool.query(
       `WITH RECURSIVE date_range AS (
           SELECT CAST(? AS DATE) AS d
@@ -223,13 +242,13 @@ class DashboardRepository {
       [startDate, endDate],
     );
 
-    return withGuestChart(rows, startDate, endDate);
+    return withGuestChart(await scopeChartStaff(rows, startDate, endDate, facilityId), startDate, endDate, false, facilityId);
   }
 
   // 3c) Biểu đồ theo THÁNG cho cả 1 năm (dùng cho filter "năm") - gộp dữ
   // liệu 12 tháng, tháng nào không có bản ghi `meal` vẫn trả về 0 (không bị
   // thiếu điểm trên biểu đồ). Cũng chỉ đếm suất ăn "completed".
-  async getChartByMonthRange(year) {
+  async getChartByMonthRange(year, facilityId) {
     const [rows] = await pool.query(
       `SELECT
           DATE_FORMAT(m.meal_date, '%Y-%m')                             AS meal_date,
@@ -261,20 +280,20 @@ class DashboardRepository {
         }
       );
     });
-    return withGuestChart(filled, `${year}-01-01`, `${year}-12-31`, true);
+    return withGuestChart(await scopeChartStaff(filled, `${year}-01-01`, `${year}-12-31`, facilityId, true), `${year}-01-01`, `${year}-12-31`, true, facilityId);
   }
 
   // Điểm vào chung cho filter tuần/tháng/năm ở trang chủ.
   // period: "week" | "month" | "year"; anchorDate: 1 ngày bất kỳ nằm trong
   // khoảng muốn xem (mặc định hôm nay).
-  async getChartByPeriod(period, anchorDate) {
+  async getChartByPeriod(period, anchorDate, facilityId) {
     const safeAnchor = anchorDate || getVietnamDate();
     const range = resolvePeriodRange(period, safeAnchor);
 
     const data =
       range.granularity === "month"
-        ? await this.getChartByMonthRange(range.start.slice(0, 4))
-        : await this.getChartByDayRange(range.start, range.end);
+        ? await this.getChartByMonthRange(range.start.slice(0, 4), facilityId)
+        : await this.getChartByDayRange(range.start, range.end, facilityId);
 
     return {
       period,

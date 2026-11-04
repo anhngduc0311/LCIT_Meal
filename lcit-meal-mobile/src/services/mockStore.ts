@@ -1,4 +1,5 @@
 import { formatBusinessDate } from '../utils/formatters';
+import { getFacility, type FacilityFilter } from '../utils/facilities';
 /**
  * Mock Store
  * Quản lý trạng thái dữ liệu mẫu trong bộ nhớ khi chạy chế độ Mock
@@ -844,7 +845,40 @@ class MockStore {
     };
   }
 
-  getDashboardChart(period: 'week' | 'month' | 'year' = 'week', date?: string): DashboardChartResponse {
+  getDashboardChart(period: 'week' | 'month' | 'year' = 'week', date?: string, facility: FacilityFilter = 'all'): DashboardChartResponse {
+    if (facility !== 'all') {
+      const anchor = date || formatBusinessDate(new Date());
+      const day = new Date(`${anchor}T12:00:00Z`);
+      const start = new Date(day);
+      const end = new Date(day);
+      if (period === 'week') {
+        start.setUTCDate(day.getUTCDate() - (day.getUTCDay() + 6) % 7);
+        end.setTime(start.getTime() + 6 * 86400000);
+      } else if (period === 'month') {
+        start.setUTCDate(1); end.setUTCMonth(end.getUTCMonth() + 1, 0);
+      } else { start.setUTCMonth(0, 1); end.setUTCMonth(11, 31); }
+      const from = start.toISOString().slice(0,10), to = end.toISOString().slice(0,10);
+      const data: DashboardChartResponse['data'] = [];
+      for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+        const current = cursor.toISOString().slice(0,10);
+        const label = period === 'year' ? current.slice(0,7) : current;
+        let point = data.find(item => item.meal_date === label);
+        if (!point) { point = { meal_date: label, total_meal_slots: 0, registered_staff_count: 0 }; data.push(point); }
+        const meal = this.meals.find(item => item.mealDate === current && !item.isCancelled && item.status === 'active');
+        if (!meal) continue;
+        for (const registration of this.registrations.filter(item => item.mealId === meal.id && item.status === 'completed')) {
+          const user = this.users.find(item => item.id === registration.userId);
+          if (user && getFacility(user) === (facility === 'unassigned' ? null : facility)) {
+            point.registered_staff_count++;
+            point.total_meal_slots += 1 + registration.guestCount;
+          }
+        }
+        if (current < formatBusinessDate(new Date()) || (current === formatBusinessDate(new Date()) && Date.now() >= Date.parse(`${current}T12:00:00+07:00`))) {
+          point.total_meal_slots += this.getMealGuestCounts(current,current).filter(item => item.facilityId === facility).reduce((sum,item)=>sum+item.guestCount,0);
+        }
+      }
+      return { period, granularity: period === 'year' ? 'month' : 'day', from, to, data };
+    }
     if (period === 'year') {
       return {
         period: 'year',

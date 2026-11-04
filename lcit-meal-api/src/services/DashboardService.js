@@ -19,7 +19,12 @@ class DashboardService {
 
   // Dữ liệu biểu đồ trang chủ theo filter tuần/tháng/năm.
   // period không hợp lệ -> mặc định "week" (giữ hành vi cũ: 7 ngày gần nhất).
-  async getChart(period, date) {
+  async getChart(period, date, facilityId) {
+    if (facilityId !== undefined && !['1','2','all','unassigned'].includes(String(facilityId))) {
+      throw new AppError('Cơ sở ăn không hợp lệ', 400);
+    }
+    const selectedFacility = facilityId === undefined || facilityId === 'all' ? undefined
+      : facilityId === 'unassigned' ? 'unassigned' : Number(facilityId);
     const safePeriod = DASHBOARD_CHART_PERIODS.includes(period)
       ? period
       : "week";
@@ -29,7 +34,7 @@ class DashboardService {
         ? date
         : undefined;
 
-    return this.dashboardRepository.getChartByPeriod(safePeriod, safeDate);
+    return this.dashboardRepository.getChartByPeriod(safePeriod, safeDate, selectedFacility);
   }
 }
 

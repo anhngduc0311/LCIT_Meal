@@ -6,6 +6,7 @@
 import { apiClient } from './apiClient';
 import { mockStore } from './mockStore';
 import { DashboardHomeData, DashboardChartResponse } from '../types';
+import type { FacilityFilter } from '../utils/facilities';
 
 export const dashboardService = {
   /**
@@ -25,15 +26,17 @@ export const dashboardService = {
   async getChart(
     period: 'week' | 'month' | 'year' = 'week',
     date?: string,
-    useMock = false
+    useMock = false,
+    facility: FacilityFilter = 'all'
   ): Promise<DashboardChartResponse> {
     if (useMock) {
       await new Promise((res) => setTimeout(res, 200));
-      return mockStore.getDashboardChart(period, date);
+      return mockStore.getDashboardChart(period, date, facility);
     }
     const params = new URLSearchParams();
     if (period) params.append('period', period);
     if (date) params.append('date', date);
+    if (facility !== 'all') params.append('facilityId', String(facility));
 
     const query = params.toString() ? `?${params.toString()}` : '';
     return await apiClient<DashboardChartResponse>(`/dashboard/chart${query}`);

@@ -35,6 +35,7 @@ export interface ChartPoint {
 }
 
 export interface ManagementMealChartProps {
+  scopeLabel?: string;
   points: ChartPoint[];
   isLoading?: boolean;
   selectedPeriod: 'week' | 'month' | 'year';
@@ -205,6 +206,7 @@ export function ManagementMealChart({
   isLoading = false,
   selectedPeriod,
   onPeriodChange,
+  scopeLabel = 'Toàn cơ quan',
 }: ManagementMealChartProps) {
   const { width } = useWindowDimensions();
   const wide = width >= 850;
@@ -275,7 +277,7 @@ export function ManagementMealChart({
         <View style={styles.headingCopy}>
           <Text style={styles.sectionTitle}>Biểu đồ suất ăn thực tế</Text>
           <Text style={styles.sectionSubtitle}>
-            Toàn cơ quan · Chỉ tính các suất đã hoàn thành qua trưa
+            {scopeLabel} · Chỉ tính các suất đã hoàn thành qua trưa
           </Text>
         </View>
 

@@ -79,7 +79,7 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
     data: chartData,
     isLoading: isLoadingChart,
     refetch: refetchChart,
-  } = useDashboardChart(selectedPeriod);
+  } = useDashboardChart(selectedPeriod, today, facilityFilter);
 
   const { data: pendingOptions = [], refetch: refetchRegs } = useManagementMealOptions({
     status: 'pending',
@@ -138,7 +138,7 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
   const unpaidRecords = homeData?.outstanding?.unpaid_record_count ?? 0;
 
   // Chart data calculation
-  const points = chartData?.data || homeData?.weeklyChart || [];
+  const points = chartData?.data || [];
 
   return (
     <ScreenContainer scrollable={false} backgroundColor={colors.background}>
@@ -259,6 +259,7 @@ export default function ManagementDashboardScreen({ isTab = false }: { isTab?: b
 
         {/* Biểu đồ số lượng suất ăn & Cán bộ */}
         <ManagementMealChart
+          scopeLabel={facilityLabel(facilityFilter)}
           points={points}
           isLoading={isLoadingChart}
           selectedPeriod={selectedPeriod}

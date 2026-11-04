@@ -22,7 +22,9 @@ class DashboardController {
   getChart = async (req, res, next) => {
     try {
       const { period, date } = req.query;
-      const data = await this.dashboardService.getChart(period, date);
+      const roles = (req.user.roles || []).map(role => typeof role === 'string' ? role : role.code);
+      const kitchenOnly = roles.includes('kitchen') && !roles.some(role => role === 'admin' || role === 'manager');
+      const data = await this.dashboardService.getChart(period, date, kitchenOnly ? 1 : req.query.facilityId);
 
       return ApiResponse.success(res, data);
     } catch (error) {
