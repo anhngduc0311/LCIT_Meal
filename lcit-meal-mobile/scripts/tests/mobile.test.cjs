@@ -343,10 +343,15 @@ test('Auth service persists normalized login and clears session even offline', a
 });
 test('Mock store preserves registration ID and waits for cancellation approval', () => {
   const { mockStore } = app.load('services/mockStore.ts');
+  for (const pending of mockStore.getMyMealOptions().filter(option => option.status === 'pending')) {
+    mockStore.rejectMealOption(pending.id);
+  }
   const meal = mockStore.createMeal('2099-01-15', 'Test');
   const reg = mockStore.registerMeal(meal.id, 2);
   const option = mockStore.createMealOption('cancel_schedule', meal.mealDate, meal.mealDate);
   assert.equal(option.status, 'pending');
+  assert.throws(() => mockStore.createMealOption('cancel_schedule', meal.mealDate, meal.mealDate), /chờ duyệt/);
+  assert.throws(() => mockStore.createMealOption('cancel_permanent', meal.mealDate, '2099-12-31'), /chờ duyệt/);
   assert.equal(mockStore.getMyRegistrations().find(r => r.id === reg.id).status, 'confirmed');
   assert.equal(mockStore.approveMealOption(option.id).status, 'approved');
   assert.equal(mockStore.getMyRegistrations().find(r => r.id === reg.id).status, 'cancelled');

@@ -131,8 +131,8 @@ export function useCreateMealOptionMutation() {
 
   return useMutation<MealOption, Error, CreateMealOptionRequest>({
     mutationFn: (data) => mealService.createMealOption(data, useMockData),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['meal-options'] });
+    onSuccess: async () => {
+      await queryClient.invalidateQueries({ queryKey: ['meal-options'] });
       queryClient.invalidateQueries({ queryKey: ['meal-registrations'] });
       queryClient.invalidateQueries({ queryKey: ['meals'] });
       queryClient.invalidateQueries({ queryKey: ['notifications'] });

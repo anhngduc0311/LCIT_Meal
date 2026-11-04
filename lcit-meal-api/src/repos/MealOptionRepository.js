@@ -100,7 +100,16 @@ class MealOptionRepository {
   }
 
   async create(data) {
-    const [result] = await pool.query(
+    const db = await pool.getConnection();
+    try {
+      await db.beginTransaction();
+      // Serialize submissions for the same person, including concurrent requests
+      // from multiple devices or submitted on their behalf by management.
+      const [[user]] = await db.query('SELECT id FROM user WHERE id=? FOR UPDATE', [data.userId]);
+      if (!user) throw new AppError('Cán bộ không tồn tại', 404);
+      const [[pending]] = await db.query("SELECT id FROM meal_option WHERE user_id=? AND status='pending' LIMIT 1", [data.userId]);
+      if (pending) throw new AppError('Bạn đang có yêu cầu cắt suất chờ duyệt. Vui lòng chờ quản lý duyệt hoặc từ chối trước khi gửi yêu cầu tiếp.', 409);
+    const [result] = await db.query(
       `
             INSERT INTO meal_option (
                 user_id, type, from_date, to_date, note, status,
@@ -121,7 +130,11 @@ class MealOptionRepository {
       ],
     );
 
-    return this.get(result.insertId);
+      const option = await this.get(result.insertId, db);
+      await db.commit();
+      return option;
+    } catch (error) { await db.rollback(); throw error; }
+    finally { db.release(); }
   }
 
   async update(id, data) {

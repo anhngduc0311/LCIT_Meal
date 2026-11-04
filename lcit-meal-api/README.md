@@ -127,6 +127,11 @@ Trạng thái `meal_registration.status`:
 
 ### 6.2 Cắt suất ăn
 
+- Mỗi cán bộ chỉ có một yêu cầu `pending` tại một thời điểm. API trả 409
+  khi còn yêu cầu chờ duyệt (kể cả gửi hộ hoặc gửi từ nhiều thiết bị).
+  Sau khi tất cả yêu cầu đang chờ được duyệt/từ chối, có thể gửi yêu cầu tiếp.
+  Các yêu cầu chờ duyệt cũ được giữ nguyên để quản lý xử lý.
+
 - **Cắt hôm nay tự động duyệt trước giờ chốt; Cắt theo khoảng ngày / tùy chỉnh và dài hạn cần Quản lý duyệt.**
 - Phân loại duyệt theo `meal_option.type`:
   (`AUTO_APPROVE_TYPES` tại `src/constants/MealOption.js`):

@@ -29,6 +29,7 @@ import {
   useRegisterMealMutation,
   useCancelRegistrationMutation,
   useCreateMealOptionMutation,
+  useMyMealOptions,
 } from '../../src/hooks/useMealsData';
 import {
   formatDisplayDate,
@@ -67,6 +68,8 @@ function PersonalScheduleScreen() {
   const registerMutation = useRegisterMealMutation();
   const cancelMutation = useCancelRegistrationMutation();
   const createMealOptionMutation = useCreateMealOptionMutation();
+  const mealOptions = useMyMealOptions();
+  const hasPendingRequest = mealOptions.data?.some(option => option.status === 'pending') || false;
 
   const isLoading = loadingMeals || loadingRegs;
   const isRefreshing = refreshingMeals || refreshingRegs;
@@ -116,6 +119,7 @@ function PersonalScheduleScreen() {
   };
 
   const handleSelectDateRange = async (fromDate: string, toDate: string) => {
+    if (createMealOptionMutation.isPending || mealOptions.isLoading || mealOptions.isError || hasPendingRequest) return;
     try {
       await createMealOptionMutation.mutateAsync({
         type: 'cancel_schedule',
@@ -185,12 +189,15 @@ function PersonalScheduleScreen() {
             style={styles.rangeBtn}
             accessibilityRole="button"
             accessibilityLabel="Cắt suất nhiều ngày"
-            disabled={createMealOptionMutation.isPending}
+            disabled={createMealOptionMutation.isPending || mealOptions.isLoading || mealOptions.isError || hasPendingRequest}
           >
             <Ionicons name="calendar-outline" size={18} color={colors.primaryDark} />
             <Text style={styles.rangeBtnText}>{createMealOptionMutation.isPending ? 'Đang gửi…' : 'Cắt suất nhiều ngày'}</Text>
           </TouchableOpacity>
       </View>
+
+      {hasPendingRequest && <ResultBanner variant="error"
+        message="Bạn đang có yêu cầu cắt suất chờ duyệt. Vui lòng chờ quản lý xử lý trước khi gửi yêu cầu tiếp." />}
 
       {bannerMessage && (
         <ResultBanner

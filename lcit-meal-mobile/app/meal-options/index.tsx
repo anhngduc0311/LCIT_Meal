@@ -57,11 +57,13 @@ export default function MealOptionsScreen() {
   } | null>(null);
 
   // Queries & Mutations
-  const { data: options = [], isLoading: loadingOptions, refetch: refetchOptions } = useMyMealOptions();
+  const { data: options = [], isLoading: loadingOptions, isError: optionsError, refetch: refetchOptions } = useMyMealOptions();
+  const hasPendingRequest = options.some(option => option.status === 'pending');
   const createMutation = useCreateMealOptionMutation();
   const cancelClosed = isCancellationClosed(optionType === 'cancel_today' ? todayStr : fromDate, now);
 
   const handleSubmit = async () => {
+    if (createMutation.isPending || loadingOptions || optionsError || hasPendingRequest) return;
     if (!fromDate) {
       setBannerMessage({ variant: 'error', text: 'Vui lòng chọn ngày bắt đầu cắt suất.' });
       return;
@@ -165,6 +167,8 @@ export default function MealOptionsScreen() {
       )}
 
       {/* Tab Switcher */}
+      {hasPendingRequest && <ResultBanner variant="error"
+        message="Bạn đang có yêu cầu cắt suất chờ duyệt. Vui lòng chờ quản lý duyệt hoặc từ chối trước khi gửi yêu cầu tiếp." />}
       <View style={styles.tabSwitcher}>
         <TouchableOpacity
           activeOpacity={0.7}
@@ -362,11 +366,11 @@ export default function MealOptionsScreen() {
 
                 {/* Nút gửi yêu cầu */}
                 <Button
-                  title={cancelClosed ? 'Quá hạn cắt suất' : 'Xác nhận gửi yêu cầu cắt suất'}
+                  title={hasPendingRequest ? 'Đang chờ duyệt yêu cầu trước' : cancelClosed ? 'Quá hạn cắt suất' : 'Xác nhận gửi yêu cầu cắt suất'}
                   variant="primary"
                   size="lg"
                   loading={createMutation.isPending}
-                  disabled={createMutation.isPending || cancelClosed}
+                  disabled={createMutation.isPending || cancelClosed || loadingOptions || optionsError || hasPendingRequest}
                   onPress={handleSubmit}
                   fullWidth
                   style={styles.submitBtn}

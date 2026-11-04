@@ -488,6 +488,9 @@ class MockStore {
     note?: string,
     userId = this.currentUserId
   ): MealOption {
+    if (this.mealOptions.some(option => option.userId === userId && option.status === 'pending')) {
+      throw new Error('Bạn đang có yêu cầu cắt suất chờ duyệt. Vui lòng chờ quản lý duyệt hoặc từ chối trước khi gửi yêu cầu tiếp.');
+    }
     const isAutoApproved = type === 'cancel_today';
     const newOption: MealOption = {
       id: Date.now(),
