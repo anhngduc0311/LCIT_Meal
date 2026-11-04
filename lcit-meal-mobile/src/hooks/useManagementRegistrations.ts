@@ -86,6 +86,15 @@ export function useManagementMealOptions(params: MealOptionFilterParams = {}) {
   });
 }
 
+export function useReactivateMealOption() {
+  const { isMockMode } = useAuth();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, fromDate }: { id: number; fromDate: string }) => mealService.reactivateMealOption(id, fromDate, isMockMode),
+    onSuccess: async () => { await queryClient.invalidateQueries(); },
+  });
+}
+
 export function useApproveMealOption() {
   const { isMockMode } = useAuth();
   const queryClient = useQueryClient();

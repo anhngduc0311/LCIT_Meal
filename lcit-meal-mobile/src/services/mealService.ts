@@ -515,6 +515,11 @@ export const mealService = {
     await apiClient(`/meal-options/${id}`, { method: 'DELETE' });
   },
 
+  async reactivateMealOption(id: number, fromDate: string, useMock = false): Promise<{ fromDate: string; restoredCount: number }> {
+    if (useMock) return mockStore.reactivateMealOption(id, fromDate);
+    return apiClient(`/meal-options/${id}/reactivate`, { method: 'PATCH', body: JSON.stringify({ fromDate }) });
+  },
+
   // ==================== LỊCH NGHỈ LỄ (HOLIDAY EVENTS) ====================
 
   /**

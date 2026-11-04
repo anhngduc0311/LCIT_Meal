@@ -570,6 +570,23 @@ class MockStore {
     return true;
   }
 
+  reactivateMealOption(id: number, fromDate: string) {
+    const option = this.mealOptions.find(o => o.id === id);
+    if (!option || option.status !== 'approved' || option.toDate < fromDate) throw new Error('Yêu cầu không còn hiệu lực.');
+    const endDate = option.toDate;
+    if (fromDate <= option.fromDate) option.status = 'rejected';
+    else option.toDate = new Date(Date.parse(`${fromDate}T00:00:00Z`) - 86400000).toISOString().slice(0, 10);
+    let restoredCount = 0;
+    for (const meal of this.meals) {
+      if (meal.mealDate < fromDate || meal.mealDate < option.fromDate || meal.mealDate > endDate || meal.isCancelled) continue;
+      if (this.mealOptions.some(o => o.userId === option.userId && o.status === 'approved' && o.fromDate <= meal.mealDate && o.toDate >= meal.mealDate)) continue;
+      const existing = this.registrations.find(r => r.userId === option.userId && r.mealId === meal.id);
+      if (!existing || existing.status === 'cancelled') { this.registerMeal(meal.id, 0, option.userId); restoredCount++; }
+    }
+    this.notify();
+    return { fromDate, restoredCount };
+  }
+
   // ==================== PAYMENTS ====================
   getAllPayments(): Payment[] {
     return this.payments.map((p) => {

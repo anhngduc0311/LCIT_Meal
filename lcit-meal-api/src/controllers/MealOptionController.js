@@ -117,6 +117,7 @@ class MealOptionController {
       const mealOption = await this.mealOptionService.reactivate(
         req.params.id,
         getActor(req),
+        req.body?.fromDate,
       );
 
       return ApiResponse.success(res, mealOption);

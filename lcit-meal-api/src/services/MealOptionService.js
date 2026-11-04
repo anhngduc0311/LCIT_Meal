@@ -112,6 +112,31 @@ class MealOptionService {
     return this.mealOptionRepository.list();
   }
 
+  async reactivate(id, actor = {}, fromDate) {
+    if (!(actor.roles || []).includes(ROLE.ADMIN)) {
+      throw new AppError("Chỉ admin được khôi phục suất ăn dài hạn", 403);
+    }
+    const { date: today, time } = getVietnamNow();
+    const earliest = time < '08:20' ? today
+      : new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+    const effectiveDate = fromDate || earliest;
+    const parsed = typeof effectiveDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(effectiveDate)
+      ? new Date(`${effectiveDate}T00:00:00Z`) : null;
+    if (!parsed || !Number.isFinite(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== effectiveDate || effectiveDate < earliest) {
+      throw new AppError(`Ngày khôi phục phải từ ${earliest}; không thay đổi ngày đã chốt suất`, 400);
+    }
+    const option = await this.get(id);
+    const user = await this.userRepository.get(option.userId);
+    if (!user || String(user.status) !== '1') throw new AppError('Tài khoản này không còn hoạt động', 409);
+    const result = await this.mealOptionRepository.reactivateWithRegistrations(id, effectiveDate, actor.actorId);
+    await this.logAction(LOG_ACTION.ACTION_UPDATE, actor, `meal_option:${id}`,
+      `Khôi phục ăn từ ${effectiveDate}: ${result.restoredCount} suất`, option, result);
+    await this.notificationService.notifyUser({ title: 'Đã khôi phục suất ăn',
+      content: `Admin đã khôi phục suất ăn của bạn từ ${effectiveDate}. Các ngày bếp nghỉ hoặc còn yêu cầu cắt khác được giữ nguyên.`,
+      url: '/schedule', createdBy: actor.actorId }, option.userId);
+    return result;
+  }
+
   async get(id) {
     const mealOption = await this.mealOptionRepository.get(id);
 

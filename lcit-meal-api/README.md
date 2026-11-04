@@ -138,8 +138,14 @@ Trạng thái `meal_registration.status`:
 - Quản lý nhận thông báo mang tính thông tin để điều chỉnh số suất cần nấu.
 - API `approve` / `reject` và trạng thái `pending` vẫn được giữ để xử lý nốt các
   yêu cầu cũ tạo trước khi đổi nghiệp vụ.
-- `reactivate`: dành cho quản lý, dùng khi người đã `cancel_permanent` muốn ăn
-  lại — rút `to_date` của yêu cầu xuống hôm qua để kết thúc hiệu lực.
+- `PATCH /meal-options/:id/reactivate` (chỉ admin), body `{ "fromDate": "YYYY-MM-DD" }`:
+  kết thúc yêu cầu cắt theo khoảng/dài hạn đã duyệt từ ngày chọn. Trước 08:20
+  được chọn hôm nay; từ 08:20 chỉ được chọn ngày mai trở đi (giờ Việt Nam).
+  Giữ lịch sử trước ngày khôi phục; nếu chưa bắt đầu cắt thì vô hiệu hóa yêu cầu.
+  Trong một transaction, khôi phục suất cán bộ bị hủy và tạo suất còn thiếu
+  trong lịch bếp hiện có, bỏ qua bếp đóng, ngày nghỉ và yêu cầu cắt khác còn hiệu lực.
+  Suất đã đăng ký giữ nguyên; suất khôi phục có 0 khách. Tự động tạo suất các
+  tháng sau tiếp tục áp dụng cấu hình hiện tại. Có audit log và thông báo cho cán bộ.
 
 ### 6.3 Hủy lịch bếp ăn (nghỉ lễ / sự kiện)
 

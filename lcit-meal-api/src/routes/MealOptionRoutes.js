@@ -54,7 +54,7 @@ const mealOptionRoutes = (mealOptionController, authMiddleware, authorize) => {
   // yêu cầu cắt suất vĩnh viễn/theo khoảng ngày đã duyệt.
   router.patch(
     "/:id/reactivate",
-    authorize(ROLE.ADMIN, ROLE.MANAGER),
+    authorize(ROLE.ADMIN),
     mealOptionController.reactivate,
   );
 
