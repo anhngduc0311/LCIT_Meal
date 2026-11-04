@@ -8,7 +8,9 @@ class DashboardController {
   // GET /api/dashboard/home
   getHome = async (req, res, next) => {
     try {
-      const data = await this.dashboardService.getHomeData(req.user.id, req.query.date);
+      const roles = (req.user.roles || []).map(role => role.code);
+      const kitchenOnly = roles.includes('kitchen') && !roles.some(role => role === 'admin' || role === 'manager');
+      const data = await this.dashboardService.getHomeData(req.user.id, req.query.date, kitchenOnly ? 1 : undefined);
 
       return ApiResponse.success(res, data);
     } catch (error) {

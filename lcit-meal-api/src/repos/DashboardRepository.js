@@ -1,4 +1,5 @@
 const pool = require("../config/database");
+const userFacility = require('../ultis/userFacility');
 
 const getVietnamDate = () =>
   new Intl.DateTimeFormat("en-CA", {
@@ -87,6 +88,24 @@ async function withGuestChart(rows, start, end, monthly = false) {
   return rows.map(row => ({ ...row, total_meal_slots: Number(row.total_meal_slots) + (amounts.get(row.meal_date) || 0) }));
 }
 class DashboardRepository {
+  // Kitchen staff prepare meals for one site, not the agency-wide total.
+  async getKitchenStaff(date, facilityId) {
+    const selectedDate = date || getVietnamDate();
+    const [rows] = await pool.query(`SELECT u.full_name, u.facility_id, mr.guest_count
+      FROM meal_registration mr
+      JOIN meal m ON m.id = mr.meal_id
+      JOIN user u ON u.id = mr.user_id
+      WHERE m.meal_date = ? AND m.status = 'active' AND m.is_cancelled = 0
+        AND mr.status IN ('confirmed','completed')`, [selectedDate]);
+    const staff = rows.filter(row => userFacility(row) === facilityId);
+    const extraGuests = await mealRepository.filterGuestCounts(selectedDate, selectedDate);
+    const guests = staff.reduce((sum, row) => sum + Math.max(0, Number(row.guest_count) || 0), 0)
+      + extraGuests.filter(row => Number(row.facilityId) === facilityId)
+        .reduce((sum, row) => sum + Math.max(0, Number(row.guestCount) || 0), 0);
+    return { facility_id: facilityId, registered_staff_count: staff.length,
+      total_guest_count: guests, total_meal_slots: staff.length + guests };
+  }
+
   // 1) Suất ăn hôm nay
   async getTodayMeal(date) {
     const today = date || getVietnamDate();
@@ -334,7 +353,7 @@ class DashboardRepository {
   }
 
   // Chạy song song toàn bộ 7 truy vấn trên cho trang chủ.
-  async getHomeData(userId, date) {
+  async getHomeData(userId, date, facilityId) {
     const [
       todayMeal,
       todayStaff,
@@ -345,7 +364,7 @@ class DashboardRepository {
       unseenNotificationCount,
     ] = await Promise.all([
       this.getTodayMeal(date),
-      this.getTodayStaff(date),
+      facilityId ? this.getKitchenStaff(date, facilityId) : this.getTodayStaff(date),
       this.getWeeklyChart(),
       this.getPaymentList(),
       this.getOutstanding(),
@@ -353,6 +372,7 @@ class DashboardRepository {
       this.getUnseenNotificationCount(userId),
     ]);
 
+    if (facilityId && todayMeal) todayMeal.total_meal_slots = todayStaff.total_meal_slots;
     return {
       todayMeal,
       todayStaff,
