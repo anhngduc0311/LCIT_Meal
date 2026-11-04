@@ -54,7 +54,7 @@ function CancellationApprovals() {
   const [restoreRequest, setRestoreRequest] = useState<MealOption | null>(null);
   const [restoreDate, setRestoreDate] = useState<string | null>(null);
   const [pickingDate, setPickingDate] = useState(false);
-  const { today, now } = useCancellationDeadline('08:20');
+  const { today, now } = useCancellationDeadline(undefined, '08:20');
   const earliestRestoreDate = isCancellationClosed(today, now, '08:20')
     ? new Date(Date.parse(`${today}T00:00:00Z`) + 86400000).toISOString().slice(0, 10) : today;
   const [notice, setNotice] = useState<{ message: string; variant: 'success' | 'error' } | null>(null);

@@ -37,7 +37,7 @@ import { FacilityFilter, getFacility, matchesFacility } from '../../src/utils/fa
 import { buildMonthlyMeals, countsAsMeal, monthRange, monthlyPaymentState, shiftMonth } from '../../src/utils/monthlyMeals';
 import { formatDisplayDate, formatCurrency } from '../../src/utils/formatters';
 import { extractUserRole } from '../../src/types/auth';
-import type { MealRegistration, Payment, User } from '../../src/types';
+import type { MealGuestCount, MealRegistration, Payment, User } from '../../src/types';
 import { mealService } from '../../src/services/mealService';
 import { colors } from '../../src/theme/colors';
 import { radius } from '../../src/theme/radius';
@@ -108,9 +108,8 @@ function MonthlyBoard() {
   const [paymentPerson, setPaymentPerson] = useState<User | null>(null);
   const [invoice, setInvoice] = useState<Payment | null>(null);
   const [guestOpen, setGuestOpen] = useState(false);
-  const [guestMode, setGuestMode] = useState<'add' | 'remove'>('add');
   const [guestDate, setGuestDate] = useState(today);
-  const [guestExtra, setGuestExtra] = useState(1);
+  const [guestNotice, setGuestNotice] = useState<string | null>(null);
 
   const range = useMemo(() => monthRange(month), [month]);
   const registrations = useManagementRegistrations({ from: range.from, to: range.to });
@@ -237,7 +236,7 @@ function MonthlyBoard() {
   const selectedDayStats = table.days.get(selectedDate) || { staff: 0, guests: 0, total: 0 };
   const removableGuests = (date: string) => standaloneGuests.filter(item => item.mealDate === date)
     .reduce((sum, item) => sum + Number(item.guestCount), 0);
-  const saveGuests = async () => {
+  const saveGuests = async (nextCount: number) => {
     if (mealLocked(guestDate, Date.now())) {
       setGuestOpen(false);
       setNotice({ variant: 'error', message: lockedMessage });
@@ -245,20 +244,19 @@ function MonthlyBoard() {
     }
     const meal = table.mealsByDate.get(guestDate);
     if (busy.current || !meal || (facility !== 1 && facility !== 2)) return;
-    if (guestMode === 'remove' && guestExtra > removableGuests(guestDate)) {
-      setNotice({ variant: 'error', message: 'Số suất khách cần bỏ vượt quá số đã thêm.' });
-      setGuestOpen(false);
-      return;
-    }
+    const currentCount = removableGuests(guestDate);
+    const delta = nextCount - currentCount;
+    if (nextCount < 0 || Math.abs(delta) !== 1) return;
     busy.current = true; setSaving(true);
+    setGuestNotice(null);
     try {
-      const updateGuests = guestMode === 'remove' ? mealService.removeMealGuests : mealService.addMealGuests;
-      await updateGuests(meal.id, facility, guestExtra, isMockMode);
-      setNotice({ variant: 'success', message: `Đã ${guestMode === 'remove' ? 'bỏ' : 'thêm'} ${guestExtra} suất khách cho Cơ sở ${facility}, ngày ${formatDisplayDate(guestDate)}.` });
+      const updateGuests = delta < 0 ? mealService.removeMealGuests : mealService.addMealGuests;
+      const updated = await updateGuests(meal.id, facility, 1, isMockMode);
+      queryClient.setQueryData<MealGuestCount[]>(['meal-guests', { from: range.from, to: range.to }, isMockMode], (previous: MealGuestCount[] | undefined) =>
+        [...(previous || []).filter(item => item.mealId !== meal.id || item.facilityId !== facility), { ...updated, mealDate: guestDate }]);
     } catch (error) {
-      setNotice({ variant: 'error', message: error instanceof Error ? error.message : 'Chưa cập nhật được suất khách.' });
+      setGuestNotice(error instanceof Error ? error.message : 'Chưa cập nhật được suất khách.');
     } finally {
-      setGuestOpen(false);
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['management', 'registrations'] }),
         queryClient.invalidateQueries({ queryKey: ['meal-guests'] }),
@@ -695,7 +693,7 @@ function MonthlyBoard() {
               <Text style={styles.selectedDaySub}>{selectedDayStats.staff} cán bộ · {selectedDayStats.guests} khách</Text>
               <Button title="Điều chỉnh khách" size="sm" variant="outline"
                 disabled={saving || mealLocked(selectedDate) || !selectedMeal || Boolean(selectedMeal.isCancelled) || selectedMeal.status !== 'active' || (facility !== 1 && facility !== 2)}
-                onPress={() => { setGuestMode('add'); setGuestDate(selectedDate); setGuestExtra(1); setGuestOpen(true); }} />
+                onPress={() => { setGuestDate(selectedDate); setGuestNotice(null); setGuestOpen(true); }} />
             </View>
             {/* Sub-filter chips for day view */}
             <View style={styles.daySubFilterRow}>
@@ -841,22 +839,12 @@ function MonthlyBoard() {
               <Text style={styles.dialogTitle}>Điều chỉnh khách</Text>
               <Text style={styles.dialogHint}>Ngày ăn: {formatDisplayDate(guestDate)}</Text>
               <Text style={styles.dialogHint}>Cơ sở {facility}</Text>
+              {guestNotice && <ResultBanner variant="error" message={guestNotice} onDismiss={() => setGuestNotice(null)} />}
+              <GuestCounter value={removableGuests(guestDate)} onChange={count => { void saveGuests(count); }} min={0} max={Number.MAX_SAFE_INTEGER}
+                disabled={saving || mealLocked(guestDate)} label="Tổng số khách hiện tại" valueDescription="khách"
+                helperText={saving ? 'Đang cập nhật…' : 'Mỗi lần bấm + hoặc − sẽ thêm hoặc bớt 1 khách và lưu ngay.'} />
               <View style={styles.actions}>
-                <Button title="Thêm khách" size="sm" variant={guestMode === 'add' ? 'primary' : 'secondary'}
-                  accessibilityState={{ selected: guestMode === 'add' }} disabled={saving}
-                  onPress={() => { setGuestMode('add'); setGuestExtra(1); }} style={{ flex: 1 }} />
-                <Button title="Bớt khách" size="sm" variant={guestMode === 'remove' ? 'primary' : 'secondary'}
-                  accessibilityState={{ selected: guestMode === 'remove' }} disabled={saving || removableGuests(guestDate) === 0}
-                  onPress={() => { setGuestMode('remove'); setGuestExtra(1); }} style={{ flex: 1 }} />
-              </View>
-              <GuestCounter value={guestExtra} onChange={setGuestExtra} min={1} max={guestMode === 'remove' ? Math.max(1, Math.min(1000, removableGuests(guestDate))) : 1000} disabled={saving}
-                label={guestMode === 'remove' ? 'Số suất khách cần bớt' : 'Số suất khách cần thêm'} valueDescription={`${guestExtra} suất khách`}
-                helperText={guestMode === 'remove' ? `Có thể bớt ${removableGuests(guestDate)} suất khách đã thêm riêng cho cơ sở này.` : ''} />
-              <View style={styles.actions}>
-                <Button title="Hủy" variant="secondary" disabled={saving} onPress={() => setGuestOpen(false)} style={{ flex: 1 }} />
-                <Button title={guestMode === 'remove' ? 'Xác nhận bớt' : 'Xác nhận thêm'} loading={saving}
-                  disabled={mealLocked(guestDate) || (guestMode === 'remove' && (guestExtra > removableGuests(guestDate) || removableGuests(guestDate) === 0))}
-                  onPress={() => { void saveGuests(); }} style={{ flex: 1 }} />
+                <Button title="Đóng" variant="secondary" disabled={saving} onPress={() => setGuestOpen(false)} style={{ flex: 1 }} />
               </View>
             </ScrollView>
           </ModalCard>
