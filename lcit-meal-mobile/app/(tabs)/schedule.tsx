@@ -5,7 +5,7 @@
  * Kết nối thực tế TanStack React Query (T22, T25)
  */
 
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   View,
   Text,
@@ -33,6 +33,7 @@ import {
 } from '../../src/hooks/useMealsData';
 import {
   formatDisplayDate,
+  formatBusinessDate,
 } from '../../src/utils/formatters';
 import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
@@ -50,7 +51,15 @@ export default function ScheduleScreen() {
 
 function PersonalScheduleScreen() {
   const router = useRouter();
-  const [period, setPeriod] = useState<'upcoming' | 'history'>('upcoming');
+  const { today, now } = useCancellationDeadline();
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const previousToday = useRef(today);
+  useEffect(() => {
+    const oldToday = previousToday.current;
+    setSelectedDate(date => date === oldToday ? today : date);
+    previousToday.current = today;
+  }, [today]);
   const [filterMode, setFilterMode] = useState<'all' | 'registered' | 'cancelled'>('all');
   const [bannerMessage, setBannerMessage] = useState<string | null>(null);
   const [bannerVariant, setBannerVariant] = useState<'success' | 'error'>('success');
@@ -73,11 +82,13 @@ function PersonalScheduleScreen() {
 
   const isLoading = loadingMeals || loadingRegs;
   const isRefreshing = refreshingMeals || refreshingRegs;
-  const { today, now } = useCancellationDeadline();
 
   const handleRefresh = async () => {
-    await Promise.all([refetchMeals(), refetchRegs()]);
+    await Promise.all([refetchMeals(), refetchRegs(), mealOptions.refetch()]);
   };
+
+  const selectDate = (date: string) => { setSelectedDate(date); setFilterMode('all'); };
+  const changeDay = (offset: number) => selectDate(new Date(Date.parse(`${selectedDate}T12:00:00Z`) + offset * 86400000).toISOString().slice(0, 10));
 
   const handleRegister = async (mealId: number) => {
     try {
@@ -137,8 +148,7 @@ function PersonalScheduleScreen() {
     }
   };
 
-  const periodMeals = meals.filter((meal) => period === 'upcoming'
-    ? meal.mealDate >= today : meal.mealDate < today);
+  const dayMeals = meals.filter(meal => formatBusinessDate(meal.mealDate) === selectedDate);
   const matchesFilter = (meal: typeof meals[number], mode: typeof filterMode) => {
     const reg = registrations.find((r) => r.mealId === meal.id || r.mealDate === meal.mealDate);
     if (mode === 'registered') {
@@ -154,9 +164,7 @@ function PersonalScheduleScreen() {
     { key: 'registered', label: 'Đã đăng ký' },
     { key: 'cancelled', label: 'Đã cắt suất' },
   ] as const;
-  const filteredMeals = periodMeals.filter((meal) => matchesFilter(meal, filterMode))
-    .sort((a, b) => period === 'upcoming'
-      ? a.mealDate.localeCompare(b.mealDate) : b.mealDate.localeCompare(a.mealDate));
+  const filteredMeals = dayMeals.filter(meal => matchesFilter(meal, filterMode));
   const selectedCancelReg = registrations.find((reg) => reg.id === selectedRegId);
   const cancelDate = meals.find((meal) => meal.id === selectedCancelReg?.mealId)?.mealDate
     || selectedCancelReg?.mealDate;
@@ -173,16 +181,19 @@ function PersonalScheduleScreen() {
         subtitle="Xem thực đơn và quản lý suất ăn của bạn"
       />
       <View style={styles.toolsRow}>
-        <View style={styles.periodControl}>
-          {([{ key: 'upcoming', label: 'Sắp tới' }, { key: 'history', label: 'Lịch sử' }] as const).map((item) => (
-            <TouchableOpacity key={item.key} accessibilityRole="tab"
-              accessibilityState={{ selected: period === item.key }}
-              onPress={() => { setPeriod(item.key); setFilterMode('all'); }}
-              style={[styles.periodTab, period === item.key && styles.periodTabActive]}>
-              <Text style={[styles.filterText, period === item.key && styles.periodTextActive]}>{item.label}</Text>
-            </TouchableOpacity>
-          ))}
+        <View style={styles.dateControl}>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Xem ngày ăn trước" onPress={() => changeDay(-1)} style={styles.dateArrow}>
+            <Ionicons name="chevron-back" size={21} color={colors.primary} />
+          </TouchableOpacity>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Chọn ngày xem lịch ăn" onPress={() => setDatePickerVisible(true)} style={styles.dateSelection}>
+            <Text style={styles.listHint}>{selectedDate === today ? 'Hôm nay' : 'Ngày đang xem'}</Text>
+            <View style={styles.dateLabel}><Ionicons name="calendar-outline" size={17} color={colors.primary} /><Text style={styles.dateText}>{formatDisplayDate(selectedDate)}</Text></View>
+          </TouchableOpacity>
+          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Xem ngày ăn tiếp theo" onPress={() => changeDay(1)} style={styles.dateArrow}>
+            <Ionicons name="chevron-forward" size={21} color={colors.primary} />
+          </TouchableOpacity>
         </View>
+        {selectedDate !== today && <TouchableOpacity accessibilityRole="button" onPress={() => selectDate(today)} style={styles.todayButton}><Text style={styles.rangeBtnText}>Về hôm nay</Text></TouchableOpacity>}
           <TouchableOpacity
             activeOpacity={0.7}
             onPress={() => setRangePickerVisible(true)}
@@ -214,17 +225,16 @@ function PersonalScheduleScreen() {
             onPress={() => setFilterMode(filter.key)}
             style={[styles.filterChip, filterMode === filter.key && styles.filterChipActive]}>
             <Text style={[styles.filterText, filterMode === filter.key && styles.filterTextActive]}>
-              {filter.label} ({periodMeals.filter((meal) => matchesFilter(meal, filter.key)).length})
+              {filter.label} ({dayMeals.filter((meal) => matchesFilter(meal, filter.key)).length})
             </Text>
           </TouchableOpacity>
         ))}
       </View>
       <View style={styles.listHeading}>
-        <Text style={styles.listTitle}>{period === 'upcoming' ? 'Hôm nay & sắp tới' : 'Lịch sử suất ăn'}</Text>
-        <Text style={styles.listHint}>{filteredMeals.length} ngày</Text>
+        <Text style={styles.listTitle}>Lịch ăn ngày {formatDisplayDate(selectedDate)}</Text>
       </View>
       <Text style={styles.listDescription}>
-        {period === 'upcoming' ? 'Ngày gần nhất ở đầu · Chạm vào thẻ để xem chi tiết' : 'Các ngày đã qua, mới nhất ở đầu'}
+        Chọn ngày để xem thực đơn và suất ăn của bạn.
       </Text>
 
       {/* Danh sách ngày ăn */}
@@ -256,9 +266,9 @@ function PersonalScheduleScreen() {
           <EmptyState
             iconName="calendar-outline"
             title="Không tìm thấy ngày ăn phù hợp"
-            description={filterMode !== 'all' ? 'Thử xem tất cả trạng thái trong khoảng thời gian này.' : period === 'upcoming' ? 'Chưa có lịch ăn từ hôm nay. Bạn có thể xem lại các ngày đã qua.' : 'Chưa có lịch ăn cho các ngày đã qua.'}
-            actionText={filterMode !== 'all' ? 'Xóa bộ lọc' : period === 'upcoming' ? 'Xem lịch sử' : 'Xem sắp tới'}
-            onAction={() => filterMode !== 'all' ? setFilterMode('all') : setPeriod(period === 'upcoming' ? 'history' : 'upcoming')}
+            description={filterMode !== 'all' ? 'Thử xem tất cả trạng thái trong ngày này.' : `Chưa có lịch ăn ngày ${formatDisplayDate(selectedDate)}. Vui lòng chọn ngày khác.`}
+            actionText={filterMode !== 'all' ? 'Xóa bộ lọc' : 'Chọn ngày khác'}
+            onAction={() => filterMode !== 'all' ? setFilterMode('all') : setDatePickerVisible(true)}
           />
         )}
       </View>
@@ -282,6 +292,8 @@ function PersonalScheduleScreen() {
       />
 
       {/* Modal chọn khoảng ngày để cắt suất */}
+      {datePickerVisible && <DatePickerModal visible mode="single" initialDate={selectedDate} title="Chọn ngày xem lịch ăn"
+        onSelectSingle={selectDate} onClose={() => setDatePickerVisible(false)} />}
       <DatePickerModal
         visible={rangePickerVisible}
         mode="range"
@@ -296,10 +308,12 @@ function PersonalScheduleScreen() {
 
 const styles = StyleSheet.create({
   toolsRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, marginBottom: spacing.lg },
-  periodControl: { flexDirection: 'row', backgroundColor: colors.surfaceSubtle, borderRadius: radius.lg, padding: 4, flexGrow: 1 },
-  periodTab: { flex: 1, minHeight: 44, justifyContent: 'center', alignItems: 'center', paddingHorizontal: spacing.md, borderRadius: radius.md },
-  periodTabActive: { backgroundColor: colors.surface },
-  periodTextActive: { color: colors.primary, fontWeight: typography.weights.bold },
+  dateControl: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: radius.lg, borderWidth: 1, borderColor: colors.border, flexGrow: 1 },
+  dateArrow: { minWidth: 44, minHeight: 52, alignItems: 'center', justifyContent: 'center' },
+  dateSelection: { flex: 1, minHeight: 52, alignItems: 'center', justifyContent: 'center', paddingHorizontal: spacing.sm },
+  dateLabel: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  dateText: { color: colors.primaryDark, fontSize: typography.sizes.sm, fontWeight: typography.weights.bold },
+  todayButton: { minHeight: 44, paddingHorizontal: spacing.md, justifyContent: 'center', borderRadius: radius.md, backgroundColor: colors.primaryLight },
   listHeading: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm },
   listTitle: { fontSize: typography.sizes.base, fontWeight: typography.weights.bold, color: colors.text },
   listHint: { fontSize: typography.sizes.xs, color: colors.textSecondary },
