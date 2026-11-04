@@ -207,9 +207,6 @@ function PersonalScheduleScreen() {
           </TouchableOpacity>
       </View>
 
-      {hasPendingRequest && <ResultBanner variant="error"
-        message="Bạn đang có yêu cầu cắt suất chờ duyệt. Vui lòng chờ quản lý xử lý trước khi gửi yêu cầu tiếp." />}
-
       {bannerMessage && (
         <ResultBanner
           variant={bannerVariant}
