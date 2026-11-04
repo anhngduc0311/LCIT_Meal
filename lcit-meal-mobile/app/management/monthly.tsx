@@ -33,7 +33,7 @@ import { useSystemSettings } from '../../src/hooks/useManagementSettings';
 import { useFacilities } from '../../src/hooks/useFacilities';
 import { useCancellationDeadline } from '../../src/hooks/useCancellationDeadline';
 import { isCancellationClosed } from '../../src/utils/cancellationDeadline';
-import { FacilityFilter, getFacility, matchesFacility } from '../../src/utils/facilities';
+import { FacilityFilter, getFacility, matchesFacility, isMealStaff } from '../../src/utils/facilities';
 import { buildMonthlyMeals, countsAsMeal, monthRange, monthlyPaymentState, shiftMonth } from '../../src/utils/monthlyMeals';
 import { formatDisplayDate, formatCurrency } from '../../src/utils/formatters';
 import { extractUserRole } from '../../src/types/auth';
@@ -123,6 +123,7 @@ function MonthlyBoard() {
 
   const registeredIds = new Set((registrations.data || []).map(r => r.userId));
   const people = (users.data || []).filter(user => {
+    if (!isMealStaff(user)) return false;
     const userRole = extractUserRole(user);
     return (userRole === 'employee' || userRole === 'manager')
       && (['1', 'active'].includes(String(user.status)) || registeredIds.has(user.id))

@@ -1,11 +1,15 @@
 import type { Meal, MealGuestCount, MealRegistration, Payment, User } from '../types';
 import { buildMonthlyMeals, monthRange } from './monthlyMeals';
-import { FacilityId, FacilityOverrides, getFacility } from './facilities';
+import { FacilityId, FacilityOverrides, getFacility, isMealStaff } from './facilities';
 
 export function buildMonthlyCollections(month: string, users: (Pick<User, 'id' | 'fullName' | 'username'> & { facilityId?: FacilityId | null })[],
   records: MealRegistration[], meals: Meal[], payments: Payment[], price: number, guestPrice: number,
   guests: MealGuestCount[] = [], scope: { facilityId?: FacilityId; throughDate?: string; overrides?: FacilityOverrides } = {}) {
   if (![price, guestPrice].every(value => Number.isFinite(value) && value >= 0)) throw new Error('Chưa cấu hình đơn giá suất ăn hợp lệ.');
+  const excludedIds = new Set(users.filter(user => !isMealStaff(user)).map(user => user.id));
+  users = users.filter(isMealStaff);
+  records = records.filter(record => !excludedIds.has(record.userId));
+  payments = payments.filter(payment => !excludedIds.has(payment.userId));
   if (scope.facilityId !== undefined) {
     users = users.filter(user => getFacility(user, scope.overrides) === scope.facilityId);
     const scopedIds = new Set(users.map(user => user.id));

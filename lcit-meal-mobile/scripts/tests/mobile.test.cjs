@@ -373,6 +373,18 @@ test('Only pending range and permanent cancellations need approval; daily cuts n
   assert.equal(options[0].id, 1);
 });
 
+test('Shared management account is excluded from staff totals and monthly collections', () => {
+  const {isMealStaff,summarizeFacilityMeals}=app.load('utils/facilities.ts');
+  const {buildMonthlyCollections}=app.load('utils/monthlyCollections.ts');
+  const users=[{id:1,fullName:'Kim Mạnh Cường',username:'cuongkm'},{id:53,fullName:'Quản lý',username:'quanly',facilityId:1}];
+  const records=users.map(user=>({id:user.id,userId:user.id,mealId:1,mealDate:'2026-11-04',status:'completed',guestCount:0}));
+  assert.equal(isMealStaff({username:' QUANLY '}),false);
+  assert.equal(summarizeFacilityMeals(records,users)[1].staff,1);
+  const summary=buildMonthlyCollections('2026-11',users,records,[{id:1,mealDate:'2026-11-04',status:'active',isCancelled:false}],[],30000,30000);
+  assert.equal(summary.rows.length,1);
+  assert.equal(summary.staffAmount,30000);
+});
+
 test('Removing standalone guests updates totals and preserves other facilities', async () => {
   const { mealService } = app.load('services/mealService.ts');
   const { mockStore } = app.load('services/mockStore.ts');

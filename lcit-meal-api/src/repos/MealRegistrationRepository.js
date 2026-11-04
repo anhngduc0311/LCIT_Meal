@@ -1,6 +1,7 @@
 const pool = require("../config/database");
 const MealRegistration = require("../models/MealRegistration");
 const PaginationHelper = require("../ultis/PaginationHelper");
+const AppError = require('../ultis/AppError');
 
 const MEAL_REG_SELECT_FIELDS = `
     mr.id,
@@ -20,6 +21,12 @@ const MEAL_REG_JOINS = `
 `;
 
 class MealRegistrationRepository {
+  async assertMealParticipant(userId) {
+    const [[user]] = await pool.query('SELECT username FROM user WHERE id=?', [userId]);
+    if (String(user?.username || '').trim().toLowerCase() === 'quanly') {
+      throw new AppError('Tài khoản quanly chỉ dùng quản lý, không tính là cán bộ ăn.', 409);
+    }
+  }
   async list() {
     const [rows] = await pool.query(`
       SELECT ${MEAL_REG_SELECT_FIELDS}
@@ -209,6 +216,7 @@ class MealRegistrationRepository {
   }
 
   async create(data) {
+    await this.assertMealParticipant(data.userId);
     const [result] = await pool.query(
       `
             INSERT INTO meal_registration (user_id, meal_id, guest_count, status, created_at)
@@ -226,6 +234,10 @@ class MealRegistrationRepository {
   }
 
   async update(id, data) {
+    if (data.status !== 'cancelled') {
+      const registration = await this.get(id);
+      if (registration) await this.assertMealParticipant(registration.userId);
+    }
     await pool.query(
       `
             UPDATE meal_registration
@@ -241,6 +253,10 @@ class MealRegistrationRepository {
   }
 
   async updateStatus(id, status) {
+    if (status !== 'cancelled') {
+      const registration = await this.get(id);
+      if (registration) await this.assertMealParticipant(registration.userId);
+    }
     await pool.query(
       `
             UPDATE meal_registration

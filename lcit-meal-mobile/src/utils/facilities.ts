@@ -2,8 +2,11 @@ import type { MealRegistration } from '../types';
 
 export type FacilityId = 1 | 2;
 export type FacilityFilter = 'all' | 'unassigned' | FacilityId;
-export type FacilityPerson = { id?: number; fullName?: string; facilityId?: FacilityId | null };
+export type FacilityPerson = { id?: number; fullName?: string; username?: string; facilityId?: FacilityId | null };
 export type FacilityOverrides = Record<string, { name: string; facilityId: FacilityId | null }>;
+
+// The shared management account operates the kitchen but does not receive meals.
+export const isMealStaff = (person: { username?: string }) => person.username?.trim().toLowerCase() !== 'quanly';
 
 // Administrator's roster and visible columns in the November 2026 source sheet.
 // Keep accents and explicitly listed account aliases when matching people.
@@ -53,6 +56,8 @@ export function summarizeFacilityMeals(
     unassigned: { staff: 0, guests: 0, total: 0 },
   };
   for (const record of records) {
+    const user = users.find(person => person.id === record.userId);
+    if (user && !isMealStaff(user)) continue;
     if (record.status !== 'confirmed' && record.status !== 'completed') continue;
     const facility = getFacility(registrationPerson(record, users), overrides);
     const group = summary[facility ?? 'unassigned'];

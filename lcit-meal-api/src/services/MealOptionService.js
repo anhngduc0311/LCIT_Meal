@@ -127,6 +127,7 @@ class MealOptionService {
     }
     const option = await this.get(id);
     const user = await this.userRepository.get(option.userId);
+    if (String(user?.username || '').trim().toLowerCase() === 'quanly') throw new AppError('Tài khoản quanly không tính là cán bộ ăn', 409);
     if (!user || String(user.status) !== '1') throw new AppError('Tài khoản này không còn hoạt động', 409);
     const result = await this.mealOptionRepository.reactivateWithRegistrations(id, effectiveDate, actor.actorId);
     await this.logAction(LOG_ACTION.ACTION_UPDATE, actor, `meal_option:${id}`,
