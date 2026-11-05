@@ -12,6 +12,7 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Image,
   useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
@@ -26,7 +27,6 @@ import { useAuth } from '../../src/providers/AuthProvider';
 import {
   useMeals,
   useMyRegistrations,
-  useScheduleConfig,
   useRegisterMealMutation,
   useCancelRegistrationMutation,
 } from '../../src/hooks/useMealsData';
@@ -57,9 +57,8 @@ export default function HomeScreen() {
 
 function PersonalHomeScreen() {
   const router = useRouter();
-  const { width, fontScale } = useWindowDimensions();
+  const { width } = useWindowDimensions();
   const wide = width >= 850;
-  const compact = width < 420 || fontScale > 1.3;
   const { user, role, useMockData } = useAuth();
 
   const [cancelModalVisible, setCancelModalVisible] = useState(false);
@@ -71,7 +70,6 @@ function PersonalHomeScreen() {
   const { data: meals = [], isLoading: loadingMeals, isError: mealsError, refetch: refetchMeals } = useMeals();
   const { data: registrations = [], isLoading: loadingRegs, isError: regsError, refetch: refetchRegs } = useMyRegistrations();
   const { data: paymentSummary, isLoading: loadingPayments, isError: paymentsError, refetch: refetchPayments } = useMyPaymentSummary();
-  const { data: scheduleConfig } = useScheduleConfig();
 
   // Mutations
   const registerMutation = useRegisterMealMutation();
@@ -119,7 +117,6 @@ function PersonalHomeScreen() {
 
   const totalUnpaidAmount = paymentSummary?.totalUnpaidAmount || 0;
   const unpaidCount = paymentSummary?.unpaidCount || 0;
-  const cutoffTime = scheduleConfig?.cutoffTime || '08:00';
 
   return (
     <ScreenContainer
@@ -139,64 +136,28 @@ function PersonalHomeScreen() {
         userRole={role || 'employee'} isMockMode={useMockData}
         rightAction={<TouchableOpacity accessibilityRole="button" accessibilityLabel="Thông báo" onPress={() => router.push('/(tabs)/notifications')} style={styles.notifBtn}><Ionicons name="notifications-outline" size={22} color={colors.text} /></TouchableOpacity>}
       />
-      <View style={[styles.hero, wide && styles.heroWide]}>
-        <Ionicons
-          name="restaurant"
-          size={80}
-          color="rgba(255, 255, 255, 0.05)"
-          style={styles.heroWatermark}
-          pointerEvents="none"
+      <View style={styles.hero}>
+        <Image
+          source={require('../../assets/images/shared-lunch.jpg')}
+          style={styles.heroImage}
+          resizeMode="contain"
+          accessible
+          accessibilityLabel="Mâm cơm nhiều món dành cho 5 đến 6 người"
         />
-        <View style={styles.heroCopy}>
-          <View style={styles.heroBadge}>
-            <Ionicons name="sparkles" size={11} color="#DCEAA0" />
-            <Text style={styles.heroBadgeText}>BỮA TRƯA TẠI LCIT</Text>
-          </View>
-          <Text style={[styles.heroTitle, wide && styles.heroTitleWide]}>
-            An tâm bữa trưa, trọn vẹn ngày làm việc.
-          </Text>
-          <Text style={styles.heroNote} numberOfLines={compact ? 1 : 2}>
-            Xem lịch ăn, điều chỉnh suất và theo dõi tiền ăn mỗi ngày.
-          </Text>
-        </View>
-
-        <View style={[styles.deadlinesBar, wide && styles.deadlinesBarWide]}>
-          <View style={styles.deadlineCol}>
-            <View style={styles.deadlineIconBox}>
-              <Ionicons name="time" size={15} color="#DCEAA0" />
-            </View>
-            <View style={styles.deadlineInfo}>
-              <Text style={styles.deadlineLabel}>Chốt đăng ký</Text>
-              <Text style={styles.deadlineTime}>{cutoffTime}</Text>
-            </View>
-          </View>
-
-          <View style={styles.deadlinesDivider} />
-
-          <View style={styles.deadlineCol}>
-            <View style={[styles.deadlineIconBox, { backgroundColor: 'rgba(254, 243, 199, 0.15)' }]}>
-              <Ionicons name="alarm" size={15} color="#FDE68A" />
-            </View>
-            <View style={styles.deadlineInfo}>
-              <Text style={styles.deadlineLabel}>Cắt suất trước</Text>
-              <Text style={styles.deadlineTime}>08:00</Text>
-            </View>
-          </View>
-        </View>
       </View>
       <View style={[styles.columns, wide && styles.columnsWide]}>
         <View style={styles.mainColumn}>
           <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Suất ăn hôm nay</Text><TouchableOpacity accessibilityRole="button" onPress={() => router.push('/(tabs)/schedule')} style={styles.textLink}><Text style={styles.link}>Xem lịch ăn →</Text></TouchableOpacity></View>
           {loadingMeals || loadingRegs ? <Card padding="2xl" style={styles.empty}><ActivityIndicator color={colors.primary} /><Text style={styles.body}>Đang tải suất ăn của bạn…</Text></Card>
-          : mealsError || regsError ? <Card padding="xl" style={styles.empty}><Ionicons name="cloud-offline-outline" size={30} color={colors.textSecondary} /><Text style={styles.actionTitle}>Chưa tải được suất ăn</Text><Button title="Thử lại" variant="outline" onPress={handleRefresh} /></Card>
-          : todayMeal ? <MealCard dateStr={todayStr} meal={todayMeal} registration={todayReg}
-            onPress={() => router.push(`/meal/${todayMeal.id}` as any)} onRegister={handleRegisterToday}
-            onCancel={() => setCancelModalVisible(true)}
-            registering={registerMutation.isPending}
-            actionsDisabled={registerMutation.isPending || cancelMutation.isPending}
-            style={styles.todayCard}
-          /> : <Card padding="2xl" style={styles.empty}><View style={styles.emptyIcon}><Ionicons name="cafe-outline" size={32} color={colors.primary} /></View><Text style={styles.actionTitle}>Hôm nay chưa có lịch ăn</Text><Text style={styles.emptyText}>Xem lịch ăn để chủ động sắp xếp những bữa trưa tiếp theo.</Text><Button title="Xem lịch ăn" variant="outline" onPress={() => router.push('/(tabs)/schedule')} /></Card>}
-          <Text style={[styles.sectionTitle, {marginTop: 24, marginBottom: 16}]}>Thao tác nhanh</Text>
+            : mealsError || regsError ? <Card padding="xl" style={styles.empty}><Ionicons name="cloud-offline-outline" size={30} color={colors.textSecondary} /><Text style={styles.actionTitle}>Chưa tải được suất ăn</Text><Button title="Thử lại" variant="outline" onPress={handleRefresh} /></Card>
+              : todayMeal ? <MealCard dateStr={todayStr} meal={todayMeal} registration={todayReg}
+                onPress={() => router.push(`/meal/${todayMeal.id}` as any)} onRegister={handleRegisterToday}
+                onCancel={() => setCancelModalVisible(true)}
+                registering={registerMutation.isPending}
+                actionsDisabled={registerMutation.isPending || cancelMutation.isPending}
+                style={styles.todayCard}
+              /> : <Card padding="2xl" style={styles.empty}><View style={styles.emptyIcon}><Ionicons name="cafe-outline" size={32} color={colors.primary} /></View><Text style={styles.actionTitle}>Hôm nay chưa có lịch ăn</Text><Text style={styles.emptyText}>Xem lịch ăn để chủ động sắp xếp những bữa trưa tiếp theo.</Text><Button title="Xem lịch ăn" variant="outline" onPress={() => router.push('/(tabs)/schedule')} /></Card>}
+          <Text style={[styles.sectionTitle, { marginTop: 24, marginBottom: 16 }]}>Thao tác nhanh</Text>
           <View style={styles.quickGrid}>
             <Card onPress={() => router.push('/(tabs)/schedule')} style={styles.quickCard} padding="lg">
               <View style={styles.actionIcon}>
@@ -204,27 +165,27 @@ function PersonalHomeScreen() {
               </View>
               <Text style={styles.actionTitle}>Lịch ăn</Text>
               <Text style={styles.body}>Chủ động sắp xếp bữa trưa</Text>
-              <Ionicons name="arrow-forward" size={18} color={colors.primary} style={{marginTop: 12}} />
+              <Ionicons name="arrow-forward" size={18} color={colors.primary} style={{ marginTop: 12 }} />
             </Card>
             <Card onPress={() => router.push('/meal-options' as any)} style={styles.quickCard} padding="lg">
-              <View style={[styles.actionIcon, {backgroundColor: '#F4EBD8'}]}>
+              <View style={[styles.actionIcon, { backgroundColor: '#F4EBD8' }]}>
                 <Ionicons name="receipt-outline" size={22} color="#8A672C" />
               </View>
               <Text style={styles.actionTitle}>Báo cắt suất</Text>
               <Text style={styles.body}>Điều chỉnh những ngày vắng</Text>
-              <Ionicons name="arrow-forward" size={18} color={colors.primary} style={{marginTop: 12}} />
+              <Ionicons name="arrow-forward" size={18} color={colors.primary} style={{ marginTop: 12 }} />
             </Card>
           </View>
         </View>
-        <View style={[styles.sideColumn, wide && {width: 320}]}>
+        <View style={[styles.sideColumn, wide && { width: 320 }]}>
           <View style={styles.sectionHeader}><Text style={styles.sectionTitle}>Thanh toán</Text></View>
           <Card padding="2xl" style={styles.paymentCard}>
             <View style={styles.paymentTop}><Text style={styles.paymentLabel}>CHƯA THANH TOÁN</Text><Ionicons name="wallet-outline" size={22} color={colors.primary} /></View>
             {loadingPayments ? <View style={styles.paymentLoading}><ActivityIndicator color={colors.primary} /><Text style={styles.body}>Đang tải thanh toán…</Text></View>
-            : paymentsError ? <Text style={styles.paymentError}>Chưa tải được số dư. Mở thanh toán để kiểm tra lại.</Text>
-            : <><Text style={styles.paymentAmount}>{formatCurrency(totalUnpaidAmount)}</Text>
-            <View style={[styles.paymentStatus, unpaidCount > 0 && styles.paymentStatusUnpaid]}><Ionicons name={unpaidCount > 0 ? 'time-outline' : 'checkmark-circle-outline'} size={16} color={unpaidCount > 0 ? '#9A3412' : colors.primary} /><Text style={[styles.statusText, unpaidCount > 0 && styles.statusTextUnpaid]}>{unpaidCount > 0 ? `${unpaidCount} tháng còn nợ · Thu cuối tháng` : 'Chưa có tiền ăn còn nợ'}</Text></View>
-            </>}
+              : paymentsError ? <Text style={styles.paymentError}>Chưa tải được số dư. Mở thanh toán để kiểm tra lại.</Text>
+                : <><Text style={styles.paymentAmount}>{formatCurrency(totalUnpaidAmount)}</Text>
+                  <View style={[styles.paymentStatus, unpaidCount > 0 && styles.paymentStatusUnpaid]}><Ionicons name={unpaidCount > 0 ? 'time-outline' : 'checkmark-circle-outline'} size={16} color={unpaidCount > 0 ? '#9A3412' : colors.primary} /><Text style={[styles.statusText, unpaidCount > 0 && styles.statusTextUnpaid]}>{unpaidCount > 0 ? `${unpaidCount} tháng còn nợ · Thu cuối tháng` : 'Chưa có tiền ăn còn nợ'}</Text></View>
+                </>}
             <View style={styles.divider} />
             <Button title="Xem thanh toán" onPress={() => router.push('/(tabs)/payments')} fullWidth rightIcon={<Ionicons name="arrow-forward" size={18} color="white" />} />
           </Card>
@@ -252,37 +213,6 @@ function PersonalHomeScreen() {
 
 const styles = StyleSheet.create({
   datePill: { marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 6, padding: 8, borderRadius: radius.full, backgroundColor: colors.primary50 },
-  heroWide: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 22 },
-  heroTitleWide: { fontSize: 20, lineHeight: 26 },
-  deadlinesBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(0, 0, 0, 0.22)',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
-  },
-  deadlinesBarWide: { minWidth: 320 },
-  deadlineCol: { flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1 },
-  deadlineIconBox: {
-    width: 30,
-    height: 30,
-    borderRadius: 8,
-    backgroundColor: 'rgba(220, 234, 160, 0.15)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  deadlineInfo: { flex: 1 },
-  deadlineLabel: { fontSize: 11, lineHeight: 15, color: '#C8DED3', fontWeight: '500' },
-  deadlineTime: { fontSize: 15, lineHeight: 19, fontWeight: '700', color: colors.textInverse, letterSpacing: 0.2 },
-  deadlinesDivider: {
-    width: 1,
-    height: 24,
-    backgroundColor: 'rgba(255, 255, 255, 0.15)',
-    marginHorizontal: 8,
-  },
   todayCard: { padding: 20, marginBottom: 0, borderRadius: 20 },
   quickGridCompact: { flexDirection: 'column' },
   paymentLoading: { paddingVertical: 24, gap: 12, alignItems: 'center' },
@@ -311,36 +241,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   hero: {
-    backgroundColor: colors.primaryDark,
+    width: '100%',
+    aspectRatio: 2,
     borderRadius: 20,
-    padding: 16,
-    marginBottom: 16,
-    gap: 14,
     overflow: 'hidden',
-    position: 'relative',
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.08)',
+    marginBottom: 16,
+    backgroundColor: colors.primaryLight,
   },
-  heroWatermark: {
-    position: 'absolute',
-    right: -8,
-    top: -8,
-  },
-  heroCopy: { flex: 1, minWidth: 0, zIndex: 1 },
-  heroBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: 5,
-    backgroundColor: 'rgba(220, 234, 160, 0.14)',
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    borderRadius: radius.full,
-    marginBottom: 8,
-  },
-  heroBadgeText: { fontSize: 10, fontWeight: '800', letterSpacing: 1.2, color: '#DCEAA0' },
-  heroTitle: { fontSize: 16, lineHeight: 22, fontWeight: '700', letterSpacing: -0.3, color: '#FFFFFF' },
-  heroNote: { fontSize: 12, lineHeight: 17, color: '#C8DED3', marginTop: 3, maxWidth: 480 },
+  heroImage: { ...StyleSheet.absoluteFillObject, width: '100%', height: '100%' },
   columns: { gap: 28 },
   columnsWide: { flexDirection: 'row', alignItems: 'flex-start' },
   mainColumn: { flex: 1, minWidth: 0 },
