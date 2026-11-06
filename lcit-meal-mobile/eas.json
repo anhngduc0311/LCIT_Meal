@@ -19,6 +19,10 @@
       }
     },
     "production": {
+      "autoIncrement": true,
+      "ios": {
+        "image": "macos-sequoia-15.6-xcode-26.2"
+      },
       "android": {
         "buildType": "app-bundle"
       },
@@ -29,6 +33,10 @@
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6824446220"
+      }
+    }
   }
 }

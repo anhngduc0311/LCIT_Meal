@@ -7,9 +7,13 @@
     "icon": "./assets/images/icon.png",
     "scheme": "lcitmealmobile",
     "userInterfaceStyle": "light",
+    "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.lcit.meal",
       "icon": "./assets/images/icon.png",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      },
       "supportsTablet": true
     },
     "android": {
@@ -42,10 +46,18 @@
       ],
       "expo-secure-store",
       [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cho phép LCIT Meal chọn ảnh mã QR từ thư viện.",
+          "cameraPermission": "Cho phép LCIT Meal chụp ảnh mã QR.",
+          "microphonePermission": false
+        }
+      ],
+      [
         "expo-build-properties",
         {
           "android": {
-            "minSdkVersion": 23
+            "minSdkVersion": 24
           }
         }
       ],

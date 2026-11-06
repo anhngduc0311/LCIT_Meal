@@ -34,7 +34,7 @@ import {
   useApproveMealOption,
   useRejectMealOption,
 } from '../../src/hooks/useManagementRegistrations';
-import { formatCurrency, formatBusinessDateDisplay } from '../../src/utils/formatters';
+import { formatCurrency, formatBusinessDateDisplay, formatBusinessDate } from '../../src/utils/formatters';
 import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
@@ -43,7 +43,6 @@ import { FacilitySelector } from '../../src/components/common/FacilitySelector';
 import { useFacilities } from '../../src/hooks/useFacilities';
 import { useUsersList } from '../../src/hooks/useManagementUsers';
 import { FacilityFilter, facilityLabel, getFacility, matchesFacility, summarizeFacilityMeals } from '../../src/utils/facilities';
-import { formatBusinessDate } from '../../src/utils/formatters';
 import { pendingCancellationRequests } from '../../src/utils/cancellationRequests';
 import { useMealGuestCounts } from '../../src/hooks/useManagementMeals';
 
