@@ -44,10 +44,10 @@ test('Kitchen includes linked and separate guests only for its site and honors e
   });
 });
 
-test('Only the kitchen role uses the site-one dashboard; managers retain the agency data', async () => {
+test('Home forwards the selected facility while kitchen accounts remain fixed to site one', async () => {
   for (const [roles, expected] of [
-    [[{ code: 'kitchen' }], 1], [[{ code: 'manager' }], undefined],
-    [[{ code: 'admin' }, { code: 'kitchen' }], undefined],
+    [[{ code: 'kitchen' }], 1], [['kitchen'], 1], [[{ code: 'manager' }], 2],
+    [[{ code: 'admin' }, { code: 'kitchen' }], 2],
   ]) {
     let called = false;
     const controller = new DashboardController({ async getHomeData(id, date, facility) {
@@ -64,10 +64,16 @@ test('The meal card and staff breakdown use the same facility total', async () =
   const repo = new DashboardRepository();
   repo.getTodayMeal = async () => ({ total_meal_slots: 45 });
   repo.getKitchenStaff = async () => ({ total_meal_slots: 25, registered_staff_count: 25 });
-  for (const method of ['getWeeklyChart', 'getPaymentList', 'getOutstanding', 'getPendingMealOptionCount', 'getUnseenNotificationCount']) {
+  repo.getWeeklyChart = async (facilityId, date) => {
+    assert.equal(facilityId, 1);
+    assert.equal(date, '2026-11-04');
+    return [{ total_meal_slots: 125 }];
+  };
+  for (const method of ['getPaymentList', 'getOutstanding', 'getPendingMealOptionCount', 'getUnseenNotificationCount']) {
     repo[method] = async () => null;
   }
   const data = await repo.getHomeData(7, '2026-11-04', 1);
   assert.equal(data.todayMeal.total_meal_slots, 25);
   assert.equal(data.todayStaff.registered_staff_count, 25);
+  assert.equal(data.weeklyChart[0].total_meal_slots, 125);
 });

@@ -179,8 +179,8 @@ class DashboardRepository {
   // jobs/mealCompletionJob.js), KHÔNG đếm "confirmed" (mới chỉ đăng ký,
   // chưa chắc đã ăn). Vì vậy hôm nay trước 12h trưa và các ngày trong tương
   // lai sẽ luôn ra 0 - đúng ý nghĩa "chỉ tính suất ăn đã hoàn thành".
-  async getWeeklyChart() {
-    const today = getVietnamDate();
+  async getWeeklyChart(facilityId, date) {
+    const today = date || getVietnamDate();
     const [rows] = await pool.query(
       `WITH RECURSIVE date_range AS (
           SELECT DATE_SUB(CAST(? AS DATE), INTERVAL 6 DAY) AS d
@@ -207,7 +207,8 @@ class DashboardRepository {
       [today, today],
     );
 
-    return withGuestChart(rows, addDaysUTC(today, -6), today);
+    const start = addDaysUTC(today, -6);
+    return withGuestChart(await scopeChartStaff(rows, start, today, facilityId), start, today, false, facilityId);
   }
 
   // 3b) Biểu đồ theo khoảng ngày tùy ý (dùng cho filter "tuần"/"tháng" -
@@ -384,7 +385,7 @@ class DashboardRepository {
     ] = await Promise.all([
       this.getTodayMeal(date),
       facilityId ? this.getKitchenStaff(date, facilityId) : this.getTodayStaff(date),
-      this.getWeeklyChart(),
+      this.getWeeklyChart(facilityId, date),
       this.getPaymentList(),
       this.getOutstanding(),
       this.getPendingMealOptionCount(),

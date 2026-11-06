@@ -49,6 +49,22 @@ test('Chart service validates and normalizes facility filters',async()=>{
   assert.deepEqual(seen.map(args=>args[2]),[1,2,undefined,'unassigned',undefined]);
   await assert.rejects(service.getChart('week','2001-01-03','bad'),{statusCode:400});
 });
+
+test('Rolling seven-day summary uses the same facility scope as the period charts', async () => {
+  const rows = await new Repository().getWeeklyChart(1, '2001-01-03');
+  assert.equal(rows[0].registered_staff_count, 25);
+  assert.equal(rows[0].total_meal_slots, 27);
+});
+
+test('Home service normalizes optional facilities without changing the agency-wide default', async () => {
+  const seen = [];
+  const service = new Service({ getHomeData: async (...args) => seen.push(args) });
+  for (const facility of [undefined, 'all', '1', '2']) await service.getHomeData(7, '2001-01-03', facility);
+  assert.deepEqual(seen.map(args => args[2]), [undefined, undefined, 1, 2]);
+  for (const facility of ['bad', ['1', '2'], 'unassigned']) {
+    await assert.rejects(service.getHomeData(7, '2001-01-03', facility), { statusCode: 400 });
+  }
+});
 test('Chart controller forwards selected facility and fixes kitchen scope to site one',async()=>{
   for(const [roles,expected] of [[['admin'],'2'],[[{code:'manager'}],'2'],[['kitchen'],1]]) {
     const controller=new Controller({getChart:async(period,date,facility)=>{assert.equal(facility,expected);return {};}});

@@ -8,6 +8,14 @@ class MealRegistrationController {
     this.mealRegistrationService = mealRegistrationService;
   }
 
+  window = async (req, res, next) => {
+    try {
+      return ApiResponse.success(res, await this.mealRegistrationService.getRegistrationWindow());
+    } catch (error) {
+      next(error);
+    }
+  };
+
   list = async (req, res, next) => {
     try {
       const registrations = await this.mealRegistrationService.list();

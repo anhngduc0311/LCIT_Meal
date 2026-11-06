@@ -1,4 +1,41 @@
-# Appmeal on Google Cloud
+# Appmeal API on Viettel
+
+Current API: `https://com365.lcit.vn:4002/api`.
+SSH host: `192.168.251.115`; application: `/opt/web_comtrua/lcit-meal-api`.
+Supervisor program: `com365.lcit.vn_p4002`.
+
+The API uses the existing Neon PostgreSQL database through `DATABASE_URL`.
+Keep the database URL and the existing Neon deployment's `JWT_SECRET` in the
+server's `.env` (mode 600), with `PORT=4002`, `HOST=0.0.0.0`, and `CORS_ORIGINS`
+including `https://com365.lcit.vn`. Do not copy MySQL settings into this deployment.
+
+Node.js is installed at `/root/.nvm/versions/node/v22.21.1/bin`; add this directory
+to `PATH` for non-interactive SSH commands. Stage releases under
+`/opt/web_comtrua/releases`, install with `npm ci`, and run `npm run test:postgres`
+and `npm run test:auth:postgres` there. These integration tests use isolated schemas.
+The existing Neon schema is already populated; do not import `sql/qlsa.sql`, seed
+demo users, or bootstrap another administrator. Back up before any future migration.
+
+Before switching code, back up the running API, Supervisor configuration, and Neon
+data under `/opt/backups/com365/<release>`. Preserve `public/uploads`, `user_data`,
+and `.git` on the server. Restart only the API with
+`supervisorctl restart com365.lcit.vn_p4002`. Verify
+`https://com365.lcit.vn:4002/healthz`, authenticated reads, and browser CORS after
+every deployment. Logs are `/var/log/com365/out_be.log` and
+`/var/log/com365/err_be.log`.
+
+The mobile default URL, `.env.example`, and EAS preview/production profiles point
+to Viettel. Rebuild installed mobile binaries to embed the new URL; when running
+locally, remove any old `EXPO_PUBLIC_API_URL` override before restarting Metro.
+
+The previous cloud VM is separate infrastructure. Switching this API does not stop
+its service or scheduled jobs. Disable the old API service after checking access
+and completing the cutover to avoid two sets of jobs using the same Neon database.
+
+## Previous Google Cloud deployment (historical)
+
+The instructions and `Caddyfile` / `install-appmeal.sh` below describe the previous
+cloud host; do not run them on the Viettel server.
 
 Target: VM `appmeal`, zone `asia-southeast1-c`, project `project-5478c3b3-05cd-4d6a-bce`.
 Web: `https://appmeal.34.126.188.117.sslip.io`; API: same origin under `/api`.

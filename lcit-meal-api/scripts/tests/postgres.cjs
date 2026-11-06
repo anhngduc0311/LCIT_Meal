@@ -48,6 +48,14 @@ async function main() {
     assert.ok(!('passwordHash' in session.user));
     tokens[role] = session.accessToken;
   }
+  for (const role of ['employee', 'manager', 'admin']) {
+    const window = await req(role, '/meal-registrations/window');
+    assert.match(window.today, /^\d{4}-\d{2}-\d{2}$/);
+    assert.match(window.targetDate, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(['open', 'late'].includes(window.targetState));
+  }
+  await req('kitchen', '/meal-registrations/window', 'GET', undefined, 403);
+  await req('employee', '/meal-registrations/not-an-id', 'GET', undefined, 400);
   for (const route of ['/users','/roles','/meals','/meal-options','/meal-registrations','/payments','/notifications','/audit-logs','/system-settings']) await req('admin', route);
   await req('employee', '/users', 'GET', undefined, 403);
   await req('admin', '/users?query=QA');
@@ -58,15 +66,24 @@ async function main() {
   assert.equal(reg.mealDate, date);
   const dashboard = await req('admin', `/dashboard/home?date=${date}`);
   assert.equal(dashboard.todayStaff.total_meal_slots, 3);
+  assert.equal((await req('admin', `/dashboard/home?date=${date}&facilityId=1`)).todayStaff.total_meal_slots, 0);
+  await pool.query('UPDATE user SET facility_id=1 WHERE id=?', [users.employee]);
+  const siteOneHome = await req('admin', `/dashboard/home?date=${date}&facilityId=1`);
+  assert.equal(siteOneHome.todayStaff.registered_staff_count, 1);
+  assert.equal(siteOneHome.todayStaff.total_guest_count, 2);
+  assert.equal(siteOneHome.todayMeal.total_meal_slots, 3);
+  assert.equal((await req('admin', `/dashboard/home?date=${date}&facilityId=2`)).todayStaff.total_meal_slots, 0);
+  assert.equal((await req('kitchen', `/dashboard/home?date=${date}&facilityId=2`)).todayStaff.total_meal_slots, 3);
+  await req('admin', '/dashboard/home?facilityId=invalid', 'GET', undefined, 400);
   for (const period of ['week','month','year']) await req('admin', `/dashboard/chart?period=${period}&date=${date}`);
   const holiday = await req('admin', '/holiday-events', 'POST', { name: 'QA holiday', fromDate: date, toDate: date }, 201);
   assert.equal((await req('employee', `/meal-registrations/${reg.id}`)).status, 'cancelled');
   await req('admin', `/holiday-events/${holiday.id}/restore`, 'PATCH', {});
   assert.equal((await req('employee', `/meal-registrations/${reg.id}`)).status, 'confirmed');
   await req('manager', `/meal-registrations/${reg.id}/cancel`, 'PATCH', {});
-  // Management can repeatedly correct historical/completed meals through HTTP.
+  // Only administrators can correct historical meals after the manager deadline.
   const [oldMeal] = await pool.query("INSERT INTO meal(meal_date,status) VALUES(?,'active')", ['2001-01-02']);
-  for (const role of ['admin', 'manager']) {
+  for (const role of ['admin']) {
     for (let round = 0; round < 2; round++) {
       const restored = await req(role, '/meal-registrations', 'POST', { userId: users.employee, mealId: oldMeal.insertId, guestCount: 1 }, 201);
       assert.equal(restored.status, 'completed');
@@ -74,6 +91,9 @@ async function main() {
       assert.equal(cut.status, 'cancelled');
     }
   }
+  await req('manager', '/meal-registrations', 'POST', { userId: users.employee, mealId: oldMeal.insertId }, 409);
+  await req('manager', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 1 }, 409);
+  await req('manager', `/meals/${oldMeal.insertId}/guests/remove`, 'PATCH', { facilityId: 1, count: 1 }, 409);
   await req('employee', '/meal-registrations', 'POST', { mealId: oldMeal.insertId }, 409);
   const payment = await req('manager', '/payments', 'POST', { userId: users.employee, paymentDate: date, amount: 90000 }, 201);
   assert.equal(payment.paymentDate, date);
@@ -96,15 +116,19 @@ async function main() {
   await req('admin', `/meal-registrations/${accrued.id}/cancel`, 'PATCH', {});
   await Promise.all([
     req('admin', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 2 }),
-    req('manager', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 3 }),
+    req('admin', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 3 }),
   ]);
-  await req('manager', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 2, count: 4 });
+  await req('admin', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 2, count: 4 });
   const guests = await req('admin', '/meals/guests?from=2001-01-02&to=2001-01-02');
   assert.equal(guests.find(g => g.facilityId === 1).guestCount, 5);
   assert.equal(guests.find(g => g.facilityId === 2).guestCount, 4);
+  const historicalSiteOne = await req('admin', '/dashboard/home?date=2001-01-02&facilityId=1');
+  assert.equal(historicalSiteOne.todayMeal.total_meal_slots, 5);
+  assert.equal(historicalSiteOne.todayStaff.total_guest_count, 5);
+  assert.equal(historicalSiteOne.weeklyChart.reduce((sum, point) => sum + Number(point.total_meal_slots), 0), 5);
   const kitchenTotals = await req('kitchen', '/dashboard/home?date=2001-01-02');
-  assert.equal(kitchenTotals.todayStaff.total_guest_count, 9);
-  assert.equal(kitchenTotals.todayStaff.total_meal_slots, 9);
+  assert.equal(kitchenTotals.todayStaff.total_guest_count, 5);
+  assert.equal(kitchenTotals.todayStaff.total_meal_slots, 5);
   assert.equal((await req('employee', '/payments/me/ledger')).totalUnpaidAmount, 0);
   const guestChart = await req('admin', '/dashboard/chart?period=month&date=2001-01-02');
   assert.equal(guestChart.data.find(row => row.meal_date === '2001-01-02').total_meal_slots, 9);
@@ -112,10 +136,10 @@ async function main() {
   assert.equal(guestYear.data.find(row => row.meal_date === '2001-01').total_meal_slots, 9);
   const guestSummary = await req('admin', `/meals/${oldMeal.insertId}/summary`);
   assert.equal(guestSummary.registeredCount, 0);
-  assert.equal(guestSummary.guestCountTotal, 9);
+  assert.equal(guestSummary.guestCountTotal, 5);
   const kitchenBoard = await req('kitchen', '/payments/monthly-board?month=2001-01');
   assert.equal(kitchenBoard.users.some(u => u.id === users.employee), true);
-  assert.deepEqual(Object.keys(kitchenBoard.users[0]).sort(), ['fullName', 'id', 'username']);
+  assert.deepEqual(Object.keys(kitchenBoard.users[0]).sort(), ['facilityId', 'fullName', 'id', 'username']);
   assert.equal(kitchenBoard.settings.every(s => ['meal_price', 'guest_meal_price'].includes(s.settingKey)), true);
   assert.equal(kitchenBoard.guests.reduce((sum, g) => sum + g.guestCount, 0), 9); checks++;
   await req('employee', '/payments/monthly-board?month=2001-01', 'GET', undefined, 403);
@@ -138,10 +162,10 @@ async function main() {
     await req('admin', removeRoute, 'PATCH', { facilityId: 1, count }, 400);
   }
   await req('admin', removeRoute, 'PATCH', { facilityId: 3, count: 1 }, 400);
-  assert.equal((await req('manager', removeRoute, 'PATCH', { facilityId: 1, count: 2 })).guestCount, 3);
+  assert.equal((await req('admin', removeRoute, 'PATCH', { facilityId: 1, count: 2 })).guestCount, 3);
   await req('admin', removeRoute, 'PATCH', { facilityId: 1, count: 4 }, 409);
   const concurrentCuts = await Promise.all([1, 2].map(() => fetch(`${base}/api${removeRoute}`, {
-    method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokens.manager}` },
+    method: 'PATCH', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${tokens.admin}` },
     body: JSON.stringify({ facilityId: 1, count: 2 }),
   })));
   assert.deepEqual(concurrentCuts.map(response => response.status).sort(), [200, 409]); checks++;
@@ -149,7 +173,7 @@ async function main() {
   const remainingGuests = await req('admin', '/meals/guests?from=2001-01-02&to=2001-01-02');
   assert.equal(remainingGuests.find(g => g.facilityId === 1).guestCount, 0);
   assert.equal(remainingGuests.find(g => g.facilityId === 2).guestCount, 4);
-  assert.equal((await req('kitchen', '/dashboard/home?date=2001-01-02')).todayStaff.total_meal_slots, 4);
+  assert.equal((await req('kitchen', '/dashboard/home?date=2001-01-02')).todayStaff.total_meal_slots, 0);
   await pool.query('UPDATE meal SET is_cancelled=1 WHERE id=?', [oldMeal.insertId]);
   await req('manager', removeRoute, 'PATCH', { facilityId: 2, count: 1 }, 409);
   await req('manager', `/meals/${oldMeal.insertId}/guests`, 'PATCH', { facilityId: 1, count: 1 }, 409);

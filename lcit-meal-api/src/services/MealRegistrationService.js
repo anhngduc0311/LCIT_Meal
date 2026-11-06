@@ -10,7 +10,7 @@ const MAX_GUEST_PER_REGISTRATION = 10;
 
 const REGISTRATION_CLOSE_TIME_KEY = "registration_close_time";
 
-const getVietnamNow = () => {
+const getVietnamNow = (now = new Date()) => {
   const parts = new Intl.DateTimeFormat("en-CA", {
     timeZone: "Asia/Ho_Chi_Minh",
     year: "numeric",
@@ -18,8 +18,8 @@ const getVietnamNow = () => {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-    hour12: false,
-  }).formatToParts(new Date());
+    hourCycle: "h23",
+  }).formatToParts(now);
 
   const map = Object.fromEntries(parts.map((p) => [p.type, p.value]));
   return {
@@ -41,6 +41,30 @@ class MealRegistrationService {
     this.notificationService = notificationService;
     this.auditLogService = auditLogService;
     this.systemSettingRepository = systemSettingRepository;
+  }
+
+  // Read-only timing contract used by the employee web page.
+  async getRegistrationWindow(now = new Date()) {
+    const { date: today, time: nowTime } = getVietnamNow(now);
+    const [closeSetting, completionSetting] = await Promise.all([
+      this.systemSettingRepository.getByKey(REGISTRATION_CLOSE_TIME_KEY),
+      this.systemSettingRepository.getByKey('meal_completion_time'),
+    ]);
+    const readTime = setting => {
+      const value = setting?.settingValue ?? setting?.setting_value;
+      return /^([01]\d|2[0-3]):[0-5]\d$/.test(value || '') ? value : null;
+    };
+    const closeTime = readTime(closeSetting);
+    const completionTime = readTime(completionSetting) || '12:00';
+    const isPastClose = Boolean(closeTime) && nowTime >= closeTime;
+    const isPastCompletion = nowTime >= completionTime;
+    const nextDay = new Date(`${today}T00:00:00Z`);
+    nextDay.setUTCDate(nextDay.getUTCDate() + 1);
+    return {
+      today, nowTime, closeTime, completionTime, isPastClose, isPastCompletion,
+      targetDate: isPastCompletion ? nextDay.toISOString().slice(0, 10) : today,
+      targetState: !isPastCompletion && isPastClose ? 'late' : 'open',
+    };
   }
 
   // Kiểm tra xem người dùng có được phép cắt suất không
@@ -145,6 +169,9 @@ class MealRegistrationService {
   }
 
   async get(id) {
+    if (!/^\d+$/.test(String(id)) || !Number.isSafeInteger(Number(id)) || Number(id) < 1) {
+      throw new AppError('Mã đăng ký suất ăn không hợp lệ', 400);
+    }
     const registration = await this.mealRegistrationRepository.get(id);
 
     if (!registration) {

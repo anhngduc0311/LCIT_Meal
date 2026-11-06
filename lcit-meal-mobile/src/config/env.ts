@@ -4,7 +4,7 @@
  */
 
 // URL mặc định máy chủ backend
-const DEFAULT_API_URL = 'https://appmeal.34.126.188.117.sslip.io/api';
+const DEFAULT_API_URL = 'https://com365.lcit.vn:4002/api';
 
 // URL mặc định theo môi trường chạy
 const getDefaultApiUrl = () => {

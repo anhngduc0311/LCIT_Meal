@@ -7,6 +7,11 @@ class DashboardService {
   }
 
   async getHomeData(userId, date, facilityId) {
+    if (facilityId !== undefined && !['1', '2', 'all'].includes(String(facilityId))) {
+      throw new AppError('Cơ sở ăn không hợp lệ', 400);
+    }
+    const selectedFacility = facilityId === undefined || facilityId === 'all'
+      ? undefined : Number(facilityId);
     if (date !== undefined) {
       const parsed = typeof date === "string" && /^\d{4}-\d{2}-\d{2}$/.test(date)
         ? new Date(`${date}T00:00:00Z`) : null;
@@ -14,7 +19,7 @@ class DashboardService {
         throw new AppError("Ngày xem không hợp lệ (YYYY-MM-DD)", 400);
       }
     }
-    return this.dashboardRepository.getHomeData(userId, date, facilityId);
+    return this.dashboardRepository.getHomeData(userId, date, selectedFacility);
   }
 
   // Dữ liệu biểu đồ trang chủ theo filter tuần/tháng/năm.

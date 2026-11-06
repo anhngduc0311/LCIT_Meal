@@ -31,6 +31,9 @@ const mealRegistrationRoutes = (
   // GET /api/meal-registrations/me - đăng ký ăn của chính mình
   router.get("/me", authorize(...ROLE.STAFF_ROLES), mealRegistrationController.listMine);
 
+  // Keep named paths before /:id so "window" never reaches the integer ID query.
+  router.get("/window", authorize(...ROLE.STAFF_ROLES), mealRegistrationController.window);
+
   // GET /api/meal-registrations/meal/:mealId - toàn bộ user đăng ký ăn 1 ngày
   router.get(
     "/meal/:mealId",
