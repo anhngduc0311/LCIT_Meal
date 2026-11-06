@@ -382,13 +382,6 @@ export default function ManagementSettingsScreen() {
             />
           </View>
 
-          <Input
-            label="URL hình ảnh mã QR ngân hàng"
-            value={paymentQrUrl}
-            onChangeText={setPaymentQrUrl}
-            placeholder="VD: https://lcit.vn/static/qr-bank.png"
-          />
-
           {paymentQrUrl ? (
             <View style={styles.qrPreviewBox}>
               <View style={styles.qrPreviewHeader}>

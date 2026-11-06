@@ -15,7 +15,7 @@ import { queryClient } from './QueryProvider';
 import { storage } from '../utils/storage';
 import { STORAGE_KEYS } from '../config/constants';
 import { env } from '../config/env';
-import { loginWithSso, PreparedSso } from '../services/ssoService';
+import { loginWithSso, finishWebSso, PreparedSso } from '../services/ssoService';
 
 interface AuthContextType {
   user: User | null;
@@ -27,6 +27,7 @@ interface AuthContextType {
   isMockMode: boolean;
   login: (credentials: LoginRequest) => Promise<{ user: User; token: string }>;
   loginSso: (prepared: PreparedSso) => Promise<void>;
+  completeSsoWeb: () => Promise<void>;
   ssoPending: boolean;
   ssoError: string | null;
   logout: () => Promise<void>;
@@ -107,12 +108,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     [useMockData]
   );
 
-  const loginSso = useCallback(async (prepared: PreparedSso) => {
+  const authenticateSso = useCallback(async (operation: () => Promise<{ user: User; token: string } | null>) => {
     if (useMockData) throw new Error('Tắt chế độ dữ liệu mẫu trước khi đăng nhập SSO.');
     setSsoPending(true);
     setSsoError(null);
     try {
-      const result = await loginWithSso(prepared);
+      const result = await operation();
       if (result) {
         queryClient.clear();
         setUser(result.user);
@@ -125,6 +126,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       router.replace('/(auth)/login');
     }
   }, [useMockData]);
+  const loginSso = useCallback((prepared: PreparedSso) => authenticateSso(() => loginWithSso(prepared)), [authenticateSso]);
+  const completeSsoWeb = useCallback(() => authenticateSso(finishWebSso), [authenticateSso]);
 
   const logout = useCallback(async () => {
     try {
@@ -186,6 +189,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isMockMode: useMockData,
       login,
       loginSso,
+      completeSsoWeb,
       ssoPending,
       ssoError,
       logout,
@@ -193,7 +197,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUseMockData,
       updateUserProfile,
     }),
-    [user, role, token, isLoading, useMockData, login, loginSso, ssoPending, ssoError, logout, switchMockUser, setUseMockData, updateUserProfile]
+    [user, role, token, isLoading, useMockData, login, loginSso, completeSsoWeb, ssoPending, ssoError, logout, switchMockUser, setUseMockData, updateUserProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

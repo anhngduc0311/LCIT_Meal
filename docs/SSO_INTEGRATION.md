@@ -127,7 +127,40 @@ Cổng SSO thực tế có trả `sdt`, chưa trả `name`; vì vậy phiên b�
 khớp/không khớp, thiếu/sai số, các định dạng 0/+84, trùng nhiều user, tài khoản khóa,
 thay đổi dữ liệu trước khi đổi ticket, và bảo toàn quyền. Kiểm thử PostgreSQL dùng
 schema riêng để kiểm tra tạo/sửa/xóa số, trùng số, import và giới hạn quản trị.
-Bản TestFlight của app không đổi.
+## SSO trong app mobile
+
+Màn hình đăng nhập có nút **Đăng nhập với SSO**. iOS/Android mở trình duyệt xác
+thực hệ điều hành bằng expo-web-browser; dùng scheme có sẵn
+`lcitmealmobile://sso/callback`. Expo Go không hỗ trợ scheme riêng của ứng dụng,
+cần bản cài đặt hoặc TestFlight. Không nhúng Key/Secret hay mật khẩu VNPT trong app.
+
+1. `POST /api/auth/sso/mobile/prepare` nhận callback chính xác trong allowlist,
+   cấp startUrl dùng một lần và khóa phiên riêng cho app; hết hạn sau 10 phút.
+2. App mở startUrl. `GET /mobile/start` tiêu thụ yêu cầu, đặt cookie trình duyệt,
+   rồi chạy OIDC state/nonce/PKCE và kiểm tra danh tính như luồng web hiện có.
+3. Callback VNPT vẫn là callback HTTPS đã đăng ký trên port 4002. Sau khi đối chiếu
+   số điện thoại, server chuyển về app với ticket dùng một lần, hạn 60 giây.
+4. `POST /mobile/exchange` yêu cầu cả ticket và khóa phiên riêng. Chỉ app bắt đầu
+   đăng nhập mới đổi được ticket; không cần dùng cookie của trình duyệt trong app.
+   API kiểm tra lại user/phone/status và cấp phiên với quyền trong database.
+
+Bản web của mobile dùng chuyển trang trực tiếp, lưu khóa phiên tạm trong
+sessionStorage của đúng tab. Route `/sso/callback` xóa dữ liệu tạm và ticket trên
+URL, đổi ticket đúng một lần dù React chạy effect lặp, rồi cập nhật AuthProvider.
+Native giữ khóa phiên trong bộ nhớ; nếu app bị đóng trong lúc đăng nhập phải thử lại.
+Callback lỗi/hủy chỉ quay về app sau khi xác minh state và cookie hợp lệ.
+
+Server mặc định chỉ cho phép callback native cố định. Biến
+`SSO_MOBILE_WEB_REDIRECT_URIS` liệt kê các callback web chính xác, không wildcard;
+Viettel hiện cho phép `http://localhost:5173/sso/callback` và
+`http://127.0.0.1:5173/sso/callback` để chạy Expo web. Website mobile thật cần callback
+HTTPS với đường dẫn `/sso/callback` được quản trị thêm riêng vào allowlist.
+
+Đã kiểm thử thực tế VNPT → API Viettel → Expo web: vào trang chủ Đạt, quyền
+Nhân viên, ngày 06/11/2026. Kiểm thử native bằng mô phỏng bao phủ nhận phiên, hủy,
+lỗi số điện thoại, sai callback, khóa sai, ticket hết hạn/phát lại. Chưa kiểm thử
+quay lại ứng dụng trên thiết bị iPhone/Android thật. Mã nguồn app có SSO; bản
+TestFlight đang cài cần build/phát hành mới để nhận nút SSO.
 
 Triển khai Viettel ngày 06/11/2026: migration phone đã áp dụng, 53 user và toàn bộ
 phân quyền cũ được giữ nguyên; chưa có user nào được tự gán số điện thoại. Web build

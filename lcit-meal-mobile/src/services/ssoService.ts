@@ -27,10 +27,33 @@ export async function prepareSso(): Promise<PreparedSso> {
 }
 
 export async function loginWithSso(prepared: PreparedSso): Promise<{ user: User; token: string } | null> {
-  // Preparation happens before the tap so the web popup opens during user activation.
+  if (Platform.OS === 'web') {
+    // Keep the proof in this tab only, then return through the same origin.
+    window.sessionStorage.setItem('lcit.sso.pending', JSON.stringify(prepared));
+    window.location.assign(prepared.startUrl);
+    return new Promise(() => {}); // The document is leaving; no local navigation may race it.
+  }
   const result = await WebBrowser.openAuthSessionAsync(prepared.startUrl, prepared.redirectUri);
   if (result.type !== 'success') return null;
-  const returned = new URL(result.url), expected = new URL(prepared.redirectUri);
+  return completeSso(prepared, result.url);
+}
+
+let webCompletion: Promise<{ user: User; token: string } | null> | null = null;
+export function finishWebSso() {
+  if (!webCompletion) webCompletion = (async () => {
+    const raw = window.sessionStorage.getItem('lcit.sso.pending');
+    window.sessionStorage.removeItem('lcit.sso.pending');
+    const url = window.location.href;
+    window.document.title = 'LCIT Meal';
+    window.history.replaceState(null, '', '/sso/callback');
+    if (!raw) throw new Error('Phiên SSO đã hết hạn. Vui lòng đăng nhập lại.');
+    return completeSso(JSON.parse(raw) as PreparedSso, url);
+  })();
+  return webCompletion;
+}
+
+async function completeSso(prepared: PreparedSso, url: string): Promise<{ user: User; token: string } | null> {
+  const returned = new URL(url), expected = new URL(prepared.redirectUri);
   if (returned.protocol !== expected.protocol || returned.host !== expected.host || returned.pathname !== expected.pathname
     || returned.username || returned.password || returned.hash) throw new Error('Phản hồi SSO không hợp lệ.');
   if (returned.searchParams.has('error')) {

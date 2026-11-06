@@ -286,27 +286,6 @@ export default function ManagementAuditScreen() {
                 <Text style={styles.detailValue}>{selectedLog?.logDetail}</Text>
               </View>
 
-              {selectedLog?.oldData ? (
-                <View style={styles.codeBlockWrapper}>
-                  <Text style={styles.codeBlockTitle}>Dữ liệu trước (Before):</Text>
-                  <Text style={styles.codeBlockText}>
-                    {typeof selectedLog.oldData === 'string'
-                      ? selectedLog.oldData
-                      : JSON.stringify(selectedLog.oldData, null, 2)}
-                  </Text>
-                </View>
-              ) : null}
-
-              {selectedLog?.newData ? (
-                <View style={styles.codeBlockWrapper}>
-                  <Text style={styles.codeBlockTitle}>Dữ liệu sau (After):</Text>
-                  <Text style={styles.codeBlockText}>
-                    {typeof selectedLog.newData === 'string'
-                      ? selectedLog.newData
-                      : JSON.stringify(selectedLog.newData, null, 2)}
-                  </Text>
-                </View>
-              ) : null}
             </ScrollView>
 
             <Button
@@ -470,23 +449,6 @@ const styles = StyleSheet.create({
     color: colors.text,
     marginTop: 2,
     fontWeight: typography.weights.medium,
-  },
-  codeBlockWrapper: {
-    backgroundColor: colors.backgroundDark,
-    borderRadius: radius.md,
-    padding: spacing.sm,
-    marginVertical: spacing.xs,
-  },
-  codeBlockTitle: {
-    fontSize: 10,
-    fontWeight: typography.weights.bold,
-    color: colors.textSecondary,
-    marginBottom: 4,
-  },
-  codeBlockText: {
-    fontSize: 10,
-    fontFamily: 'monospace',
-    color: colors.text,
   },
   closeBtn: {
     marginTop: spacing.md,

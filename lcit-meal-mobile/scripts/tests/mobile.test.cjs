@@ -526,3 +526,82 @@ test('Standalone guests count by facility/day without adding staff or personal c
   assert.equal(summarizeFacilityMeals([], [], {}, guests)[2].total, 0);
   assert.equal(buildMonthlyMeals('2026-11', [], [{ ...meals[0], isCancelled: true }], [], 30000, 30000, guests).total, 0);
 });
+
+
+test('Mobile SSO uses the app proof and persists only the local user session', async () => {
+  const verifier = 'v'.repeat(43), ticket = 't'.repeat(43);
+  const prepared = { startUrl: 'https://com365.lcit.vn:4002/api/auth/sso/mobile/start?request=test', redirectUri: 'lcitmealmobile://sso/callback', verifier };
+  const ssoApp = createTestApp({
+    'react-native': { Platform: { OS: 'ios' } },
+    'expo-constants': { default: { appOwnership: 'standalone' } },
+    'expo-web-browser': { openAuthSessionAsync: async (url, redirect) => {
+      assert.equal(url, prepared.startUrl); assert.equal(redirect, prepared.redirectUri);
+      return { type: 'success', url: prepared.redirectUri + '?ticket=' + ticket };
+    } },
+  });
+  global.fetch = async (url, config) => {
+    if (url.endsWith('/prepare')) {
+      assert.deepEqual(JSON.parse(config.body), { redirectUri: prepared.redirectUri });
+      return respond(200, { success: true, payload: prepared });
+    }
+    assert.ok(url.endsWith('/mobile/exchange'));
+    assert.deepEqual(JSON.parse(config.body), { ticket, verifier });
+    return respond(200, { success: true, payload: { accessToken: 'local-session', user: { id: 26, phone: '0901234567', roles: [{ code: 'employee' }] } } });
+  };
+  const sso = ssoApp.load('services/ssoService.ts');
+  const result = await sso.loginWithSso(await sso.prepareSso());
+  assert.equal(result.user.role, 'employee');
+  assert.equal(result.token, 'local-session');
+  const { authService } = ssoApp.load('services/authService.ts');
+  assert.equal((await authService.getStoredSession()).token, 'local-session');
+});
+
+test('Mobile SSO cancellation, mismatched redirect, missing phone and malformed tickets never create sessions', async () => {
+  for (const result of [{ type: 'cancel' }, { type: 'dismiss' },
+    { type: 'success', url: 'evil://sso/callback?ticket=' + 't'.repeat(43) },
+    { type: 'success', url: 'lcitmealmobile://sso/callback?error=missing_phone' },
+    { type: 'success', url: 'lcitmealmobile://sso/callback?error=unlinked' },
+    { type: 'success', url: 'lcitmealmobile://sso/callback?ticket=bad' },
+  ]) {
+    const ssoApp = createTestApp({ 'react-native': { Platform: { OS: 'ios' } }, 'expo-constants': { default: {} },
+      'expo-web-browser': { openAuthSessionAsync: async () => result } });
+    global.fetch = async () => { throw Error('Unexpected exchange'); };
+    const sso = ssoApp.load('services/ssoService.ts');
+    const operation = sso.loginWithSso({ startUrl: 'https://com365.lcit.vn:4002/start', redirectUri: 'lcitmealmobile://sso/callback', verifier: 'v'.repeat(43) });
+    if (result.type === 'success') await assert.rejects(operation);
+    else assert.equal(await operation, null);
+    const { authService } = ssoApp.load('services/authService.ts');
+    assert.deepEqual(await authService.getStoredSession(), { token: null, user: null });
+  }
+});
+
+
+test('Mobile web SSO survives the redirect, removes proof and callback ticket, and exchanges once under repeated effects', async () => {
+  const previousWindow = global.window;
+  const values = new Map(); let assigned, cleared, exchanges = 0;
+  const prepared = { startUrl: 'https://com365.lcit.vn:4002/api/auth/sso/mobile/start?request=test', redirectUri: 'http://localhost:5173/sso/callback', verifier: 'v'.repeat(43) };
+  global.window = { document: { title: '' }, location: { origin: 'http://localhost:5173', href: prepared.redirectUri + '?ticket=' + 't'.repeat(43), assign: url => { assigned = url; } },
+    history: { replaceState: (_state, _title, url) => { cleared = url; } },
+    sessionStorage: { setItem: (key, value) => values.set(key, value), getItem: key => values.get(key), removeItem: key => values.delete(key) } };
+  try {
+    const ssoApp = createTestApp({ 'react-native': { Platform: { OS: 'web' } }, 'expo-constants': { default: {} },
+      'expo-web-browser': { openAuthSessionAsync: () => { throw Error('Web must not depend on popups'); } } });
+    const service = ssoApp.load('services/ssoService.ts');
+    service.loginWithSso(prepared);
+    assert.equal(assigned, prepared.startUrl);
+    assert.ok(values.has('lcit.sso.pending'));
+    global.fetch = async (url, config) => {
+      exchanges++;
+      assert.ok(url.endsWith('/mobile/exchange'));
+      assert.deepEqual(JSON.parse(config.body), { verifier: prepared.verifier, ticket: 't'.repeat(43) });
+      return respond(200, { success: true, payload: { accessToken: 'local-session', user: { id: 26, roles: [{ code: 'employee' }] } } });
+    };
+    const first = service.finishWebSso(), second = service.finishWebSso();
+    assert.equal(first, second);
+    assert.equal((await first).user.role, 'employee');
+    assert.equal(exchanges, 1);
+    assert.equal(values.has('lcit.sso.pending'), false);
+    assert.equal(cleared, '/sso/callback');
+    assert.equal(global.window.document.title, 'LCIT Meal');
+  } finally { global.window = previousWindow; }
+});

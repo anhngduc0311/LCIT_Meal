@@ -137,13 +137,19 @@ function CancellationApprovals() {
         <Header title="Duyệt cắt suất" subtitle="Duyệt cắt theo khoảng hoặc dài hạn" showBack userRole={role || undefined}
           onBack={() => router.canGoBack() ? router.back() : router.replace('/management')}
           rightAction={<TouchableOpacity accessibilityRole="button" accessibilityLabel="Làm mới yêu cầu cắt suất" onPress={() => { void refresh(); }} style={styles.refresh}><Ionicons name="refresh-outline" size={21} color={colors.primary} /></TouchableOpacity>} />
-        <FacilitySelector value={facility} onChange={setFacility} />
-        {role === 'admin' && <View style={styles.actions}>
-          <Button title="Chờ duyệt" variant={tab === 'pending' ? 'primary' : 'outline'} disabled={saving} onPress={() => setTab('pending')} style={{ flex: 1 }} />
-          <Button title="Đã duyệt · Khôi phục" variant={tab === 'approved' ? 'primary' : 'outline'} disabled={saving} onPress={() => setTab('approved')} style={{ flex: 1 }} />
+        <View style={styles.filters}>
+        <FacilitySelector value={facility} onChange={setFacility} style={styles.facilitySelector} />
+        {role === 'admin' && <View accessibilityRole="tablist" style={styles.tabs}>
+          {([['pending', 'Chờ duyệt'], ['approved', 'Đã duyệt']] as const).map(([value, label]) => <TouchableOpacity
+            key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value, disabled: saving }}
+            disabled={saving} onPress={() => setTab(value)} style={[styles.tab, tab === value && styles.tabActive]}>
+            <Text style={[styles.tabText, tab === value && styles.tabTextActive]}>{label}</Text>
+          </TouchableOpacity>)}
         </View>}
         <Input value={search} onChangeText={setSearch} placeholder="Tìm tên, @tài khoản hoặc mã cán bộ" accessibilityLabel="Tìm yêu cầu cắt suất"
-          leftIcon={<Ionicons name="search-outline" size={18} color={colors.textMuted} />} containerStyle={{ marginBottom: 12 }} />
+          leftIcon={<Ionicons name="search-outline" size={18} color={colors.textMuted} />} containerStyle={{ marginBottom: 0 }} />
+        {tab === 'approved' && <Text style={styles.hint}>Chọn yêu cầu đã duyệt để khôi phục suất ăn.</Text>}
+        </View>
         {notice && <ResultBanner {...notice} onDismiss={() => setNotice(null)} />}
         <View style={styles.summary}><Ionicons name="time-outline" size={20} color={colors.primary} /><Text style={styles.summaryText}>{loading || error ? 'Đang tải yêu cầu...' : `${inFacility.length} yêu cầu ${tab === 'pending' ? 'chờ duyệt' : 'cắt còn hiệu lực'} · ${facilityLabel(facility)}`}</Text></View>
         {search.trim() && !loading && !error && <Text style={styles.hint}>Tìm thấy {filtered.length} yêu cầu</Text>}
@@ -151,6 +157,7 @@ function CancellationApprovals() {
       ListEmptyComponent={loading ? <LoadingState message="Đang tải yêu cầu cắt suất..." /> : error
         ? <ErrorState message={error.message} onRetry={() => { void refresh(); }} />
         : <EmptyState iconName="checkmark-circle-outline" title={search.trim() ? 'Không tìm thấy yêu cầu phù hợp' : tab === 'pending' ? 'Không có yêu cầu cắt suất chờ duyệt' : 'Không có yêu cầu cắt còn hiệu lực'}
+          style={styles.emptyState}
           description={search.trim() ? 'Thử tìm tên hoặc tài khoản khác.' : tab === 'pending' ? 'Các yêu cầu cắt suất mới sẽ xuất hiện tại đây.' : 'Các yêu cầu cắt theo khoảng hoặc dài hạn đã duyệt sẽ xuất hiện tại đây.'} />}
       renderItem={({ item }) => {
         const user = person(item);
@@ -182,6 +189,14 @@ function CancellationApprovals() {
 }
 
 const styles = StyleSheet.create({
+  filters: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 18, padding: 14, gap: 14, marginBottom: 14 },
+  facilitySelector: { width: '100%', alignSelf: 'stretch', marginVertical: 0 },
+  tabs: { flexDirection: 'row', backgroundColor: colors.surfaceSubtle, padding: 4, borderRadius: 12, gap: 4 },
+  tab: { flex: 1, minHeight: 44, alignItems: 'center', justifyContent: 'center', paddingVertical: 10, paddingHorizontal: 8, borderRadius: 9 },
+  tabActive: { backgroundColor: colors.primary },
+  tabText: { color: colors.textSecondary, fontSize: 14, fontWeight: '600', textAlign: 'center' },
+  tabTextActive: { color: '#FFFFFF' },
+  emptyState: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 18, marginTop: 4, minHeight: 220, padding: 24 },
   refresh: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   summary: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, backgroundColor: colors.primaryLight, borderRadius: 12, marginBottom: 12 },
   summaryText: { flex: 1, color: colors.primaryDark, fontSize: 13, fontWeight: '600' },

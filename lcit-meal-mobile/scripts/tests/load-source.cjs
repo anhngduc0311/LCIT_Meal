@@ -18,6 +18,7 @@ function createSourceLoader(overrides = {}) {
     }).outputText;
     const fallback = createRequire(filename);
     function requireSource(specifier) {
+      if (Object.hasOwn(overrides, specifier)) return overrides[specifier];
       if (specifier.startsWith('.')) {
         const base = path.resolve(path.dirname(filename), specifier);
         for (const candidate of [base, `${base}.ts`, path.join(base, 'index.ts')]) {
@@ -31,7 +32,7 @@ function createSourceLoader(overrides = {}) {
   }
   return load;
 }
-function createTestApp() {
+function createTestApp(overrides = {}) {
   const source = path.resolve(__dirname, '../../src');
   const values = new Map();
   const storage = {
@@ -41,7 +42,7 @@ function createTestApp() {
     async getObject(key) { const raw = values.get(key); return raw ? JSON.parse(raw) : null; },
     async setObject(key, value) { values.set(key, JSON.stringify(value)); },
   };
-  const load = createSourceLoader({ [path.join(source, 'utils/storage.ts')]: { storage } });
+  const load = createSourceLoader({ ...overrides, [path.join(source, 'utils/storage.ts')]: { storage } });
   return { load: relative => load(path.join(source, relative)), storage, values };
 }
 module.exports = { createTestApp };

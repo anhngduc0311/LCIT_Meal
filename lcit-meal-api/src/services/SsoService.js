@@ -75,7 +75,10 @@ class SsoService {
     const allowed = this.settings.mobileRedirectUris || ['lcitmealmobile://sso/callback'];
     if (typeof redirectUri !== 'string' || !allowed.includes(redirectUri)) throw new AppError('Đường dẫn trở về app không hợp lệ.', 400);
     const target = new URL(redirectUri);
-    if (target.search || target.hash || target.username || target.password) throw new AppError('Đường dẫn trở về app không hợp lệ.', 400);
+    const native = redirectUri === 'lcitmealmobile://sso/callback';
+    const web = target.pathname === '/sso/callback' && (target.protocol === 'https:'
+      || (target.protocol === 'http:' && ['localhost', '127.0.0.1'].includes(target.hostname)));
+    if ((!native && !web) || target.search || target.hash || target.username || target.password) throw new AppError('Đường dẫn trở về app không hợp lệ.', 400);
     const request = random(), verifier = random();
     this.mobileRequests.set(digest(request), { redirectUri, challenge: digest(verifier), expires: this.clock() + 600000 });
     const start = new URL(this.settings.redirectUri);
@@ -135,35 +138,35 @@ class SsoService {
     }
     this.pending.delete(state);
     try {
-    if (denied) {
-      const error = new AppError('Đăng nhập SSO đã bị hủy.', 400);
-      error.ssoCode = url.searchParams.get('error') === 'access_denied' ? 'cancelled' : 'invalid_response';
-      throw error;
-    }
-    const { oidc, config, metadata } = await this.configuration();
-    const tokens = await oidc.authorizationCodeGrant(config, url, {
-      expectedState: state, expectedNonce: flow.nonce, pkceCodeVerifier: flow.verifier, idTokenExpected: true,
-    });
-    const claims = tokens.claims();
-    if (!claims || claims.iss !== this.settings.issuer || typeof claims.sub !== 'string' || !claims.sub) {
-      throw new AppError('Danh tính SSO không hợp lệ.', 401);
-    }
-    // This provider documents POST /oauth2/userinfo, rather than the default GET.
-    const userResponse = await oidc.fetchProtectedResource(config, tokens.access_token,
-      new URL(metadata.userinfo_endpoint), 'POST', undefined, new Headers({ Accept: 'application/json' }));
-    if (!userResponse.ok) throw new Error('OIDC UserInfo failed');
-    const info = await userResponse.json();
-    if (info.sub !== claims.sub) throw new AppError('Danh tính SSO không khớp.', 401);
-    const user = await this.authService.resolveSsoUser(info.sdt);
-    const ticket = random();
-    this.prune();
-    this.assertCapacity();
-    this.tickets.set(digest(ticket), { userId: user.id, phone: info.sdt, cookieHash: flow.cookieHash,
-      mobileChallenge: flow.mobile?.challenge, expires: this.clock() + 60000 });
-    if (flow.mobile) return this.mobileTarget(flow.mobile.redirectUri, { ticket });
-    const target = new URL('/auth/sso/callback', this.settings.frontendOrigin);
-    target.hash = new URLSearchParams({ ticket }).toString();
-    return target.toString();
+      if (denied) {
+        const error = new AppError('Đăng nhập SSO đã bị hủy.', 400);
+        error.ssoCode = url.searchParams.get('error') === 'access_denied' ? 'cancelled' : 'invalid_response';
+        throw error;
+      }
+      const { oidc, config, metadata } = await this.configuration();
+      const tokens = await oidc.authorizationCodeGrant(config, url, {
+        expectedState: state, expectedNonce: flow.nonce, pkceCodeVerifier: flow.verifier, idTokenExpected: true,
+      });
+      const claims = tokens.claims();
+      if (!claims || claims.iss !== this.settings.issuer || typeof claims.sub !== 'string' || !claims.sub) {
+        throw new AppError('Danh tính SSO không hợp lệ.', 401);
+      }
+      // This provider documents POST /oauth2/userinfo, rather than the default GET.
+      const userResponse = await oidc.fetchProtectedResource(config, tokens.access_token,
+        new URL(metadata.userinfo_endpoint), 'POST', undefined, new Headers({ Accept: 'application/json' }));
+      if (!userResponse.ok) throw new Error('OIDC UserInfo failed');
+      const info = await userResponse.json();
+      if (info.sub !== claims.sub) throw new AppError('Danh tính SSO không khớp.', 401);
+      const user = await this.authService.resolveSsoUser(info.sdt);
+      const ticket = random();
+      this.prune();
+      this.assertCapacity();
+      this.tickets.set(digest(ticket), { userId: user.id, phone: info.sdt, cookieHash: flow.cookieHash,
+        mobileChallenge: flow.mobile?.challenge, expires: this.clock() + 60000 });
+      if (flow.mobile) return this.mobileTarget(flow.mobile.redirectUri, { ticket });
+      const target = new URL('/auth/sso/callback', this.settings.frontendOrigin);
+      target.hash = new URLSearchParams({ ticket }).toString();
+      return target.toString();
     } catch (error) {
       if (flow.mobile) error.mobileReturn = this.mobileTarget(flow.mobile.redirectUri,
         { error: ['unlinked', 'missing_phone', 'cancelled'].includes(error.ssoCode) ? error.ssoCode : 'invalid_response' });

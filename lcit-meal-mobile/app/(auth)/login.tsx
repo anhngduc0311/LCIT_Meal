@@ -163,11 +163,15 @@ export default function LoginScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.logoCircle}>
-              <Ionicons name="restaurant" size={wide ? 30 : 26} color="#DCEAA0" />
+            <View style={!wide && styles.mobileBrandIdentity}>
+              <View style={styles.logoCircle}>
+                <Ionicons name="restaurant" size={wide ? 30 : 26} color="#DCEAA0" />
+              </View>
+              <View>
+                <Text style={styles.appName}>LCIT MEAL</Text>
+                <Text style={styles.appTagline}>BỮA TRƯA TẠI CƠ QUAN</Text>
+              </View>
             </View>
-            <Text style={styles.appName}>LCIT MEAL</Text>
-            <Text style={styles.appTagline}>BỮA TRƯA TẠI CƠ QUAN</Text>
             <Text style={[styles.brandHeadline, wide && { fontSize: 42, lineHeight: 54 }]}>
               Một bữa ăn tốt.{'\n'}Một ngày hiệu quả.
             </Text>
@@ -269,6 +273,12 @@ export default function LoginScreen() {
             style={styles.loginBtn}
           />
 
+          <View style={styles.authDivider}>
+            <View style={styles.dividerLine} />
+            <Text style={styles.dividerText}>Hoặc</Text>
+            <View style={styles.dividerLine} />
+          </View>
+
           <Button
             title={ssoPending ? 'Đang đăng nhập SSO...' : 'Đăng nhập với SSO'}
             variant="outline"
@@ -277,6 +287,7 @@ export default function LoginScreen() {
             disabled={loading || useMockData}
             onPress={handleSso}
             fullWidth
+            leftIcon={<Ionicons name="shield-checkmark-outline" size={18} color={colors.primary} />}
           />
           {prepareError && <Text style={styles.footer}>{prepareError} Bấm SSO để thử lại.</Text>}
 
@@ -307,6 +318,10 @@ export default function LoginScreen() {
 }
 
 const styles = StyleSheet.create({
+  mobileBrandIdentity: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  authDivider: { flexDirection: 'row', alignItems: 'center', gap: 12, marginVertical: 14 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: colors.border },
+  dividerText: { color: colors.textMuted, fontSize: 12, lineHeight: 16 },
   desktop: { flexDirection: 'row', alignItems: 'stretch', paddingVertical: 40 },
   brandDesktop: { flex: 1, padding: 36 },
   formColumn: { flex: 1, minWidth: 0 },
