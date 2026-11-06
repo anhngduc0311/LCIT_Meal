@@ -25,7 +25,21 @@ export default function SignInForm() {
 
   // Loading & Error State
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [isSsoLoading, setIsSsoLoading] = useState(false);
+  const [error, setError] = useState<string | null>(() => {
+    const code = new URLSearchParams(window.location.search).get("sso_error");
+    if (code === "unlinked") return "Tài khoản SSO chưa được liên kết với Cơm365. Vui lòng liên hệ quản trị.";
+    if (code) return "Không hoàn tất được đăng nhập SSO. Vui lòng thử lại.";
+    return null;
+  });
+
+  const handleSso = async () => {
+    setError(null);
+    setIsSsoLoading(true);
+    try { await authService.beginSso(); }
+    catch (error) { setError(error instanceof Error ? error.message : "Không kết nối được cổng SSO."); }
+    finally { setIsSsoLoading(false); }
+  };
 
   /**
    * Khôi phục username đã lưu trước đó (nếu có)
@@ -60,6 +74,7 @@ export default function SignInForm() {
    */
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (isSsoLoading) return;
     setError(null);
     setIsLoading(true);
 
@@ -228,9 +243,9 @@ export default function SignInForm() {
                   <Button
                     className="w-full"
                     size="sm"
-                    disabled={isLoading}
+                    disabled={isLoading || isSsoLoading}
                     type="submit"
-                    aria-busy={isLoading}
+                    aria-busy={isLoading || isSsoLoading}
                   >
                     {isLoading ? (
                       <span className="flex items-center gap-2">
@@ -260,14 +275,15 @@ export default function SignInForm() {
               </div>
             </div>
 
-            {/* SSO Button (Optional) */}
+            {/* The backend only redirects after a dedicated SSO client is configured. */}
             <div className="grid grid-cols-1 gap-3">
               <button
                 type="button"
-                disabled={isLoading}
+                disabled={isLoading || isSsoLoading}
+                onClick={handleSso}
                 className="inline-flex items-center justify-center gap-3 px-7 py-3 text-sm font-normal text-gray-700 transition-colors bg-gray-100 rounded-lg hover:bg-gray-200 hover:text-gray-800 dark:bg-white/5 dark:text-white/90 dark:hover:bg-white/10 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Đăng nhập với SSO
+                {isSsoLoading ? "Đang kết nối SSO..." : "Đăng nhập với SSO"}
               </button>
             </div>
           </div>

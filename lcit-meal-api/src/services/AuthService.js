@@ -34,6 +34,19 @@ class AuthService {
       throw new AppError("Username hoặc password không chính xác", 401);
     }
 
+    return this.createSession(user, meta);
+  }
+
+  // Only called after a validated OIDC identity has an explicit account link.
+  async loginLinkedUser(userId, meta = {}) {
+    const user = await this.userRepository.get(userId);
+    if (!user || String(user.status) !== String(USER_STATUS.STATUS_ACTIVE)) {
+      throw new AppError('Tài khoản không hoạt động', 403);
+    }
+    return this.createSession(user, meta);
+  }
+
+  async createSession(user, meta = {}) {
     const accessToken = this.generateAccessToken(user);
 
     // Only the newest device keeps its persistent session.

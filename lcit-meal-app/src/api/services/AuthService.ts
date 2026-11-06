@@ -2,9 +2,29 @@
 
 import apiClient from "../client";
 import type { LoginRequest, LoginResponse } from "../types/auth";
+import type { ApiResponse } from "../types/ApiResponse";
+import { apiConfig } from "../config";
 
 export class AuthService {
   constructor(private readonly client = apiClient) {}
+
+  async beginSso(): Promise<void> {
+    const response = await this.client.get<ApiResponse<{ enabled: boolean }>>("/auth/sso/config", { skipAuthHandling: true });
+    if (!response.payload?.enabled) {
+      throw new Error("Đăng nhập SSO đang chờ cấu hình từ quản trị hệ thống. Bạn vẫn có thể đăng nhập bằng tài khoản Cơm365.");
+    }
+    const api = new URL(apiConfig.baseUrl, window.location.origin);
+    api.pathname = `${api.pathname.replace(/\/+$/, "")}/auth/sso/start`;
+    api.search = "";
+    api.hash = "";
+    window.location.assign(api.toString());
+  }
+
+  exchangeSsoTicket(ticket: string): Promise<LoginResponse> {
+    return this.client.post<LoginResponse>("/auth/sso/exchange", { ticket }, {
+      credentials: "include", skipAuthHandling: true,
+    });
+  }
 
   async login(credentials: LoginRequest): Promise<LoginResponse> {
     try {

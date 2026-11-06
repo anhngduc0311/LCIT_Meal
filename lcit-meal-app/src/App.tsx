@@ -33,6 +33,7 @@ const MyMealStatisticsLazy = lazy(
 const MyPaymentsLazy = lazy(() => import("./pages/Reports/MyPayments"));
 const MealOptionManagement = lazy(() => import("./pages/MealOption"));
 const HolidayEventManagement = lazy(() => import("./pages/HolidayEvent"));
+const SsoCallback = lazy(() => import("./pages/AuthPages/SsoCallback"));
 
 const PageLoading = () => (
   <div className="flex min-h-[60vh] items-center justify-center">
@@ -54,6 +55,7 @@ export default function App() {
       <Router>
         <ScrollToTop />
         <Routes>
+          <Route path="/auth/sso/callback" element={withSuspense(<SsoCallback />)} />
           {/* Dashboard Layout - Protected */}
           <Route element={<ProtectedRoute element={<AppLayout />} />}>
             {/* Trang chủ: mọi role đều xem được, nhưng nội dung khác nhau -

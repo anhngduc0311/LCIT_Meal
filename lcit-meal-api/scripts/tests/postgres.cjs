@@ -29,6 +29,7 @@ async function main() {
     await pool.query("INSERT INTO user_role(user_id,role_id,status) SELECT ?,id,'active' FROM role WHERE code=?", [user.insertId, role]);
     users[role] = user.insertId;
   }
+  process.env.SSO_ENABLED = 'false';
   const app = require('../../src/app');
   server = app.listen(0, '127.0.0.1');
   await new Promise(resolve => server.once('listening', resolve));
@@ -48,6 +49,8 @@ async function main() {
     assert.ok(!('passwordHash' in session.user));
     tokens[role] = session.accessToken;
   }
+  assert.equal((await req(null, '/auth/sso/config')).enabled, false);
+  await req(null, '/auth/sso/start', 'GET', undefined, 503);
   for (const role of ['employee', 'manager', 'admin']) {
     const window = await req(role, '/meal-registrations/window');
     assert.match(window.today, /^\d{4}-\d{2}-\d{2}$/);
