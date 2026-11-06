@@ -3,7 +3,7 @@
  * Giao diện đăng nhập với tài khoản/mật khẩu, hỗ trợ chọn nhanh tài khoản thử nghiệm
  */
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -27,15 +27,42 @@ import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { radius } from '../../src/theme/radius';
 import { useResponsiveLayout } from '../../src/hooks/useResponsiveLayout';
+import { prepareSso, PreparedSso } from '../../src/services/ssoService';
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { login } = useAuth();
+  const { login, loginSso, ssoPending, ssoError, useMockData } = useAuth();
   const { wide, compact } = useResponsiveLayout();
 
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [ssoPrepared, setSsoPrepared] = useState<PreparedSso | null>(null);
+  const [preparingSso, setPreparingSso] = useState(false);
+  const [prepareError, setPrepareError] = useState<string | null>(null);
+  const refreshSso = useCallback(async () => {
+    if (useMockData) return;
+    setPreparingSso(true);
+    setSsoPrepared(null);
+    setPrepareError(null);
+    try { setSsoPrepared(await prepareSso()); }
+    catch (error) { setPrepareError(error instanceof Error ? error.message : 'Không kết nối được SSO.'); }
+    finally { setPreparingSso(false); }
+  }, [useMockData]);
+  useEffect(() => {
+    refreshSso();
+    const timer = setInterval(refreshSso, 9 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [refreshSso]);
+  const handleSso = async () => {
+    if (loading || ssoPending || preparingSso) return;
+    setErrorMessage(null);
+    if (!ssoPrepared) { await refreshSso(); return; }
+    const prepared = ssoPrepared;
+    setSsoPrepared(null);
+    await loginSso(prepared);
+    await refreshSso();
+  };
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
   const [focusedField, setFocusedField] = useState<'username' | 'password' | null>(null);
@@ -83,6 +110,7 @@ export default function LoginScreen() {
 
 
   const handleLogin = async () => {
+    if (loading || ssoPending) return;
     if (Platform.OS !== 'web') {
       Keyboard.dismiss();
     }
@@ -173,10 +201,10 @@ export default function LoginScreen() {
             </Text>
           )}
 
-          {errorMessage && (
+          {(errorMessage || ssoError) && (
             <ResultBanner
               variant="error"
-              message={errorMessage}
+              message={errorMessage || ssoError || ''}
               onDismiss={() => setErrorMessage(null)}
             />
           )}
@@ -235,10 +263,22 @@ export default function LoginScreen() {
             variant="primary"
             size="lg"
             loading={loading}
+            disabled={ssoPending}
             onPress={handleLogin}
             fullWidth
             style={styles.loginBtn}
           />
+
+          <Button
+            title={ssoPending ? 'Đang đăng nhập SSO...' : 'Đăng nhập với SSO'}
+            variant="outline"
+            size="lg"
+            loading={ssoPending || preparingSso}
+            disabled={loading || useMockData}
+            onPress={handleSso}
+            fullWidth
+          />
+          {prepareError && <Text style={styles.footer}>{prepareError} Bấm SSO để thử lại.</Text>}
 
         </Card>
 

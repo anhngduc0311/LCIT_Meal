@@ -13,6 +13,7 @@ export interface Role {
 export interface User {
   id: number;
   fullName: string;
+  phone?: string | null;
   username: string;
   status: string;
   createdAt: string;

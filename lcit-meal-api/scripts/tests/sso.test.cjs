@@ -57,7 +57,7 @@ async function fixture(options = {}) {
     if (parsed.pathname === '/oauth2/userinfo') {
       assert.equal(init.method, 'POST');
       assert.equal(new Headers(init.headers).get('authorization'), 'Bearer provider-access-token');
-      return json({ sub: options.userInfoSub || 'pairwise-identity', name: 'Nguyễn Tiến Đạt', ...options.userInfo });
+      return json({ sub: options.userInfoSub || 'pairwise-identity', sdt: '0901234567', ...options.userInfo });
     }
     throw Error('Unexpected provider request');
   };
@@ -66,20 +66,21 @@ async function fixture(options = {}) {
     config[oidc.customFetch] = providerFetch;
     return config;
   }
-  const users = options.users || [{ id: 7, fullName: 'Nguyễn Tiến Đạt', status: '1', roles: [{ code: 'employee' }] }];
+  const users = options.users || [{ id: 7, fullName: 'Nguyễn Tiến Đạt', phone: '0901234567', status: '1', roles: [{ code: 'employee' }] }];
   const auth = new AuthService({ list: async () => users, updateAccessToken: async userId => sessions.push(userId) }, { create: async () => {} });
   const service = new SsoService({ ...settings, ...options.settings }, auth, {
     clock: () => now,
     loadClient: async () => ({ ...oidc, Configuration: TestConfiguration }),
     fetch: async () => json(metadata),
   });
-  const begin = async () => {
-    const result = await service.begin();
+  const begin = async (mobile = false) => {
+    const prepared = mobile ? service.prepareMobile('lcitmealmobile://sso/callback') : null;
+    const result = prepared ? await service.beginMobile(new URL(prepared.startUrl).searchParams.get('request')) : await service.begin();
     const authorization = new URL(result.authorization);
     nonce = authorization.searchParams.get('nonce');
     const callback = new URL(settings.redirectUri);
     callback.search = new URLSearchParams({ state: authorization.searchParams.get('state'), code: 'one-time-code' }).toString();
-    return { ...result, authorization, callback };
+    return { ...result, authorization, callback, prepared };
   };
   return { service, begin, calls, sessions, users, advance: milliseconds => { now += milliseconds; } };
 }
@@ -114,6 +115,65 @@ test('Real OIDC validation and POST UserInfo produce a cookie-bound, single-use 
   await assert.rejects(f.service.finish(start.callback, start.cookie), { statusCode: 400 });
 });
 
+test('Mobile callbacks use a single-use app proof without exposing credentials or accepting web exchange', async () => {
+  const f = await fixture(); const start = await f.begin(true);
+  const target = await f.service.finish(start.callback, start.cookie);
+  const ticket = new URL(target).searchParams.get('ticket');
+  assert.ok(target.startsWith('lcitmealmobile://sso/callback?ticket='));
+  assert.equal(target.includes(start.prepared.verifier), false);
+  assert.equal(target.includes('provider-access-token'), false);
+  await assert.rejects(f.service.exchangeMobile(ticket, crypto.randomBytes(32).toString('base64url')), { statusCode: 400 });
+  await assert.rejects(f.service.exchange(ticket, start.cookie, settings.frontendOrigin), { statusCode: 400 });
+  const result = await f.service.exchangeMobile(ticket, start.prepared.verifier);
+  assert.equal(result.user.id, 7);
+  assert.deepEqual(result.user.roles, [{ code: 'employee' }]);
+  await assert.rejects(f.service.exchangeMobile(ticket, start.prepared.verifier), { statusCode: 400 });
+  await assert.rejects(f.service.beginMobile(new URL(start.prepared.startUrl).searchParams.get('request')), { statusCode: 400 });
+});
+
+test('Mobile redirect allowlist, browser binding and separate web tickets fail closed', async () => {
+  const f = await fixture();
+  for (const uri of ['https://evil.test/sso/callback', 'lcitmealmobile://evil/callback', 'lcitmealmobile://sso/callback?next=evil', undefined]) {
+    assert.throws(() => f.service.prepareMobile(uri), { statusCode: 400 });
+  }
+  const start = await f.begin(true);
+  await assert.rejects(f.service.finish(start.callback, 'wrong-browser'), error => error.statusCode === 400 && !error.mobileReturn);
+  const web = await f.begin();
+  const target = await f.service.finish(web.callback, web.cookie);
+  const ticket = new URLSearchParams(new URL(target).hash.slice(1)).get('ticket');
+  await assert.rejects(f.service.exchangeMobile(ticket, start.prepared.verifier), { statusCode: 400 });
+});
+
+test('Mobile errors and cancellation return only to the exact validated app flow', async () => {
+  for (const denied of [false, true]) {
+    const f = await fixture({ users: [] }); const start = await f.begin(true);
+    if (denied) { start.callback.searchParams.delete('code'); start.callback.searchParams.set('error', 'access_denied'); }
+    await assert.rejects(f.service.finish(start.callback, start.cookie), error => {
+      const target = new URL(error.mobileReturn);
+      assert.equal(target.searchParams.get('error'), denied ? 'cancelled' : 'unlinked');
+      assert.equal(target.searchParams.has('ticket'), false);
+      return true;
+    });
+    assert.equal(f.sessions.length, 0);
+  }
+});
+
+test('Mobile preparation and tickets expire, and account changes are rechecked at exchange', async () => {
+  const f = await fixture();
+  const prepared = f.service.prepareMobile('lcitmealmobile://sso/callback');
+  f.advance(600000);
+  await assert.rejects(f.service.beginMobile(new URL(prepared.startUrl).searchParams.get('request')), { statusCode: 400 });
+  const start = await f.begin(true);
+  const ticket = new URL(await f.service.finish(start.callback, start.cookie)).searchParams.get('ticket');
+  f.advance(60000);
+  await assert.rejects(f.service.exchangeMobile(ticket, start.prepared.verifier), { statusCode: 400 });
+  const fresh = await f.begin(true);
+  const otherTicket = new URL(await f.service.finish(fresh.callback, fresh.cookie)).searchParams.get('ticket');
+  f.users[0].status = '0';
+  await assert.rejects(f.service.exchangeMobile(otherTicket, fresh.prepared.verifier), { statusCode: 403 });
+  assert.equal(f.sessions.length, 0);
+});
+
 test('State replay, expired flows, wrong browsers, duplicate state and foreign callbacks fail closed', async () => {
   const f = await fixture();
   const start = await f.begin();
@@ -146,12 +206,13 @@ test('Provider metadata cannot change issuer or send credentials to another host
   }
 });
 
-test('Only a unique active full name matches; missing, different, ambiguous or locked names fail closed', async () => {
+test('Only a unique active phone matches; missing, different, ambiguous or locked phones fail closed', async () => {
   for (const options of [
-    { users: [] }, { userInfo: { name: undefined } }, { userInfo: { name: 'Nguyen Tien Dat' } },
-    { userInfo: { name: 'Nguyễn Tiến' } }, { userInfo: { name: 123 } },
-    { users: [{ id: 7, fullName: 'Nguyễn Tiến Đạt', status: '0' }] },
-    { users: [{ id: 7, fullName: 'Nguyễn Tiến Đạt', status: '1' }, { id: 8, fullName: ' NGUYỄN  TIẾN ĐẠT ', status: '1' }] },
+    { users: [] }, { userInfo: { sdt: undefined } }, { userInfo: { sdt: '0909999999' } },
+    { userInfo: { sdt: '123' } }, { userInfo: { sdt: 901234567 } },
+    { users: [{ id: 7, phone: '0901234567', status: '0' }] },
+    { users: [{ id: 7, phone: '0901234567', status: '1' }, { id: 8, phone: '+84901234567', status: '1' }] },
+    { userInfo: { sdt: undefined, name: 'Nguyễn Tiến Đạt' } },
   ]) {
     const f = await fixture(options);
     const start = await f.begin();
@@ -161,16 +222,28 @@ test('Only a unique active full name matches; missing, different, ambiguous or l
   }
 });
 
-test('Case, whitespace and Unicode normalization match users from any facility without changing roles', async () => {
-  const f = await fixture({ userInfo: { name: '  NGUYỄN   TIẾN ĐẠT '.normalize('NFD'), groups: ['admin'] },
-    users: [{ id: 7, fullName: 'Nguyễn Tiến Đạt', facilityId: 2, status: '1', roles: [{ code: 'employee' }] }] });
+test('Phone formats match users from any facility without changing roles or requiring provider names', async () => {
+  const f = await fixture({ userInfo: { sdt: '+84 90 123 4567', groups: ['admin'] },
+    users: [{ id: 7, fullName: 'Nguyễn Tiến Đạt', phone: '0901234567', facilityId: 2, status: '1', roles: [{ code: 'employee' }] }] });
   const start = await f.begin();
-  assert.equal(start.authorization.searchParams.get('scope'), 'openid profile');
+  assert.equal(start.authorization.searchParams.get('scope'), 'openid phone');
+  assert.deepEqual(JSON.parse(start.authorization.searchParams.get('claims')), { userinfo: { sdt: { essential: true } } });
   const target = await f.service.finish(start.callback, start.cookie);
   const ticket = new URLSearchParams(new URL(target).hash.slice(1)).get('ticket');
   const result = await f.service.exchange(ticket, start.cookie, settings.frontendOrigin);
   assert.deepEqual(result.user.roles, [{ code: 'employee' }]);
   assert.equal(result.user.facilityId, 2);
+});
+
+test('Invalid provider phones fail before querying users; matching normalizes only valid Vietnamese numbers', async () => {
+  const auth = new AuthService({ list: async () => { throw Error('Unexpected DB read'); } });
+  for (const phone of [undefined, null, '', '   ', 123, {}, '901234567', '0901234567abc', '+840901234567']) {
+    await assert.rejects(auth.resolveSsoUser(phone), { statusCode: 403, ssoCode: 'missing_phone' });
+  }
+  const normalizePhone = require('../../src/ultis/normalizePhone');
+  for (const phone of ['0901234567', '+84901234567', '84901234567', '0084901234567', '090 123 4567', '(090) 123-4567']) {
+    assert.equal(normalizePhone(phone), '0901234567');
+  }
 });
 
 test('Handoff tickets expire after one minute', async () => {
@@ -183,9 +256,9 @@ test('Handoff tickets expire after one minute', async () => {
   assert.equal(f.sessions.length, 0);
 });
 
-test('A ticket is rejected if the matched account is renamed, locked, duplicated or replaced before exchange', async () => {
+test('A ticket is rejected if the matched account phone is changed, locked, duplicated or replaced before exchange', async () => {
   for (const change of [
-    users => { users[0].fullName = 'Một người khác'; },
+    users => { users[0].phone = '0909999999'; },
     users => { users[0].status = '0'; },
     users => { users.push({ ...users[0], id: 8 }); },
     users => { users[0].id = 8; },
@@ -209,17 +282,17 @@ test('Temporary flow storage has a fixed capacity and removes expired entries', 
   assert.equal(f.service.pending.size, 1);
 });
 
-test('Name-matched users must still be active and keep their existing local roles', async () => {
+test('Phone-matched users must still be active and keep their existing local roles', async () => {
   let saved = 0;
-  const user = { id: 7, fullName: 'Nguyễn Tiến Đạt', username: 'employee', status: '0', roles: [{ code: 'employee' }] };
+  const user = { id: 7, fullName: 'Nguyễn Tiến Đạt', phone: '0901234567', username: 'employee', status: '0', roles: [{ code: 'employee' }] };
   const auth = new AuthService({ list: async () => [user], updateAccessToken: async () => saved++ }, { create: async () => {} });
-  await assert.rejects(auth.loginSsoUser(7, 'Nguyễn Tiến Đạt'), { statusCode: 403 });
+  await assert.rejects(auth.loginSsoUser(7, '0901234567'), { statusCode: 403 });
   assert.equal(saved, 0);
   user.status = '1';
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
   try {
-    const result = await auth.loginSsoUser(7, 'Nguyễn Tiến Đạt');
+    const result = await auth.loginSsoUser(7, '0901234567');
     assert.deepEqual(result.user.roles, [{ code: 'employee' }]);
     assert.equal(jwt.verify(result.accessToken, process.env.JWT_SECRET).id, 7);
     assert.equal(saved, 1);

@@ -15,6 +15,7 @@ import { queryClient } from './QueryProvider';
 import { storage } from '../utils/storage';
 import { STORAGE_KEYS } from '../config/constants';
 import { env } from '../config/env';
+import { loginWithSso, PreparedSso } from '../services/ssoService';
 
 interface AuthContextType {
   user: User | null;
@@ -25,6 +26,9 @@ interface AuthContextType {
   useMockData: boolean;
   isMockMode: boolean;
   login: (credentials: LoginRequest) => Promise<{ user: User; token: string }>;
+  loginSso: (prepared: PreparedSso) => Promise<void>;
+  ssoPending: boolean;
+  ssoError: string | null;
   logout: () => Promise<void>;
   switchMockUser: (userId: number) => Promise<void>;
   setUseMockData: (enabled: boolean) => Promise<void>;
@@ -36,6 +40,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [token, setToken] = useState<string | null>(null);
+  const [ssoPending, setSsoPending] = useState(false);
+  const [ssoError, setSsoError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [useMockData, setUseMockDataState] = useState<boolean>(env.defaultUseMock);
 
@@ -91,6 +97,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const login = useCallback(
     async (credentials: LoginRequest) => {
       // The login screen owns its pending/error state. Keep navigation mounted.
+      setSsoError(null);
       const res = await authService.login(credentials, useMockData);
       queryClient.clear();
       setUser(res.user);
@@ -99,6 +106,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     },
     [useMockData]
   );
+
+  const loginSso = useCallback(async (prepared: PreparedSso) => {
+    if (useMockData) throw new Error('Tắt chế độ dữ liệu mẫu trước khi đăng nhập SSO.');
+    setSsoPending(true);
+    setSsoError(null);
+    try {
+      const result = await loginWithSso(prepared);
+      if (result) {
+        queryClient.clear();
+        setUser(result.user);
+        setToken(result.token);
+      }
+    } catch (error) {
+      setSsoError(error instanceof Error ? error.message : 'Không hoàn tất được đăng nhập SSO.');
+    } finally {
+      setSsoPending(false);
+      router.replace('/(auth)/login');
+    }
+  }, [useMockData]);
 
   const logout = useCallback(async () => {
     try {
@@ -159,12 +185,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       useMockData,
       isMockMode: useMockData,
       login,
+      loginSso,
+      ssoPending,
+      ssoError,
       logout,
       switchMockUser,
       setUseMockData,
       updateUserProfile,
     }),
-    [user, role, token, isLoading, useMockData, login, logout, switchMockUser, setUseMockData, updateUserProfile]
+    [user, role, token, isLoading, useMockData, login, loginSso, ssoPending, ssoError, logout, switchMockUser, setUseMockData, updateUserProfile]
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

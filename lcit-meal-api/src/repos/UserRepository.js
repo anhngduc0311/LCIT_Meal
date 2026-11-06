@@ -6,6 +6,7 @@ const USER_STATUS = require("../constants/UserStatus");
 const USER_SELECT_FIELDS = `
     u.id,
     u.full_name,
+    u.phone,
     u.facility_id,
     u.username,
     u.password_hash,
@@ -116,6 +117,14 @@ class UserRepository {
     return rows.length > 0;
   }
 
+  async phoneExists(phone, excludeId = null) {
+    const params = [phone];
+    let sql = 'SELECT id FROM user WHERE phone = ?';
+    if (excludeId !== null) { sql += ' AND id <> ?'; params.push(excludeId); }
+    const [rows] = await pool.query(sql + ' LIMIT 1', params);
+    return rows.length > 0;
+  }
+
   async updateAccessToken(id, accessToken) {
     await pool.query(
       `
@@ -193,6 +202,7 @@ class UserRepository {
       `
             INSERT INTO user (
                 full_name,
+                phone,
                 username,
                 password_hash,
                 auth_key,
@@ -203,10 +213,11 @@ class UserRepository {
                 updated_at,
                 updated_by
             )
-            VALUES (?, ?, ?, ?, ?, ?, NOW(), ?, NOW(), ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, NOW(), ?, NOW(), ?)
         `,
       [
         data.fullName,
+        data.phone ?? null,
         data.username,
         data.passwordHash,
         data.authKey,
@@ -231,14 +242,15 @@ class UserRepository {
         const [result] = await connection.query(
           `
                 INSERT INTO user (
-                    full_name, username, password_hash, auth_key,
+                    full_name, phone, username, password_hash, auth_key,
                     access_token, status, created_at, created_by,
                     updated_at, updated_by
                 )
-                VALUES (?, ?, ?, ?, NULL, ?, NOW(), ?, NOW(), ?)
+                VALUES (?, ?, ?, ?, ?, NULL, ?, NOW(), ?, NOW(), ?)
             `,
           [
             data.fullName,
+            data.phone ?? null,
             data.username,
             data.passwordHash,
             data.authKey,
@@ -275,6 +287,7 @@ class UserRepository {
             UPDATE user
             SET
                 full_name = ?,
+                phone = ?,
                 username = ?,
                 password_hash = ?,
                 status = ?,
@@ -284,6 +297,7 @@ class UserRepository {
         `,
       [
         data.fullName,
+        data.phone ?? null,
         data.username,
         data.passwordHash,
         data.status,

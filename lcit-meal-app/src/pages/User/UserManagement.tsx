@@ -69,6 +69,7 @@ const UserManagementInner: React.FC = () => {
                 } as Record<string, string>)[roleValue] ?? roleValue;
                 return {
                     fullName: String(values.fullname || values.hovaten || "").trim(),
+                    phone: String(values.phone || values.sdt || values.sodienthoai || "").trim(),
                     username: String(values.username || values.tendangnhap || "").trim(),
                     password: String(values.password || values.matkhau || "").trim(),
                     role,
@@ -133,6 +134,7 @@ const UserManagementInner: React.FC = () => {
         try {
             await userService.create({
                 fullName: payload.fullName,
+                phone: payload.phone,
                 username: payload.username,
                 password: payload.password ?? "",
                 roleId: payload.roleId,
@@ -160,6 +162,7 @@ const UserManagementInner: React.FC = () => {
         try {
             await userService.update(payload.id, {
                 fullName: payload.fullName,
+                phone: payload.phone,
                 username: payload.username,
                 password: payload.password,
                 roleId: payload.roleId,
@@ -333,6 +336,7 @@ const UserManagementInner: React.FC = () => {
                             </div>
                             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                                 <Detail label="Tên đăng nhập" value={viewing.username} />
+                                <Detail label="Số điện thoại" value={viewing.phone || "Chưa có"} />
                                 <Detail
                                     label="Vai trò"
                                     value={

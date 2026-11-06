@@ -67,7 +67,7 @@ export default function EditProfileScreen() {
         fullName: fullName.trim(),
         password: newPassword || undefined,
         email: email.trim() || undefined,
-        phone: phone.trim() || undefined,
+        phone: phone.trim(),
       });
 
       setBannerMessage({

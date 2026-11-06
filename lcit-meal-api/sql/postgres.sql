@@ -7,6 +7,8 @@ CREATE TABLE IF NOT EXISTS "user" (
   created_by INTEGER, updated_at TIMESTAMP, updated_by INTEGER
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_user_username_lower ON "user" (LOWER(username));
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS phone VARCHAR(32);
+CREATE UNIQUE INDEX IF NOT EXISTS uq_user_phone ON "user" (phone) WHERE phone IS NOT NULL;
 ALTER TABLE "user" ADD COLUMN IF NOT EXISTS facility_id SMALLINT CHECK(facility_id IN (1,2));
 CREATE TABLE IF NOT EXISTS role (
   id SERIAL PRIMARY KEY, display_name VARCHAR(150) NOT NULL, code VARCHAR(50) NOT NULL UNIQUE,

@@ -5,6 +5,7 @@ const USER_STATUS = require("../constants/UserStatus");
 const ROLE = require("../constants/Role");
 const LOG_ACTION = require("../constants/LogAction");
 const AppError = require("../ultis/AppError");
+const normalizePhone = require('../ultis/normalizePhone');
 
 const SALT_ROUNDS = 10;
 
@@ -45,12 +46,14 @@ class UserService {
 
   async create(data, actor = {}) {
     await this.validateCreateData(data);
+    const phone = await this.preparePhone(data.phone);
 
     const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
     const authKey = crypto.randomBytes(16).toString("hex"); // 32 ký tự, khớp cột auth_key varchar(32)
 
     const user = await this.userRepository.create({
       fullName: data.fullName,
+      phone,
       username: data.username,
       passwordHash,
       authKey,
@@ -94,6 +97,7 @@ class UserService {
     const normalized = rows.map((row, index) => ({
       rowNumber: index + 1,
       fullName: String(row.fullName || "").trim(),
+      phone: row.phone,
       username: String(row.username || "").trim(),
       password: String(row.password || ""),
       roleId: row.roleId,
@@ -132,7 +136,11 @@ class UserService {
 
     const employeeRole = await this.roleRepository.getByCode(ROLE.EMPLOYEE);
     const prepared = [];
+    const phones = new Set();
     for (const row of normalized) {
+      const phone = await this.preparePhone(row.phone);
+      if (phone && phones.has(phone)) throw new AppError(`Dòng ${row.rowNumber}: số điện thoại bị trùng trong file`, 409);
+      if (phone) phones.add(phone);
       const role = row.roleId
         ? await this.roleRepository.get(row.roleId)
         : row.roleCode
@@ -143,6 +151,7 @@ class UserService {
 
       prepared.push({
         fullName: row.fullName,
+        phone,
         username: row.username,
         passwordHash: await bcrypt.hash(row.password, SALT_ROUNDS),
         authKey: crypto.randomBytes(16).toString("hex"),
@@ -203,6 +212,7 @@ class UserService {
 
     const updatedUser = await this.userRepository.update(id, {
       fullName: data.fullName || user.fullName,
+      phone: data.phone === undefined ? user.phone : await this.preparePhone(data.phone, id),
       username: data.username || user.username,
       passwordHash,
       status: data.status || user.status,
@@ -250,6 +260,7 @@ class UserService {
 
     const updatedUser = await this.userRepository.update(userId, {
       fullName: data.fullName || user.fullName,
+      phone: data.phone === undefined ? user.phone : await this.preparePhone(data.phone, userId),
       username: user.username,
       passwordHash,
       status: user.status,
@@ -266,6 +277,14 @@ class UserService {
     );
 
     return updatedUser;
+  }
+
+  async preparePhone(value, excludeId = null) {
+    if (value === undefined || value === null || (typeof value === 'string' && !value.trim())) return null;
+    const phone = normalizePhone(value);
+    if (!phone) throw new AppError('Số điện thoại Việt Nam không hợp lệ. Nhập dạng 0... hoặc +84...', 400);
+    if (await this.userRepository.phoneExists(phone, excludeId)) throw new AppError('Số điện thoại đã được dùng cho tài khoản khác.', 409);
+    return phone;
   }
 
   async delete(id, actor = {}) {

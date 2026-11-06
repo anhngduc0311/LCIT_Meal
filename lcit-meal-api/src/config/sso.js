@@ -9,6 +9,8 @@ function loadSsoSettings(source = process.env) {
     tokenAuthMethod: source.SSO_TOKEN_AUTH_METHOD || 'client_secret_post',
     redirectUri: source.SSO_REDIRECT_URI || '',
     frontendOrigin: source.SSO_FRONTEND_ORIGIN || '',
+    mobileRedirectUris: ['lcitmealmobile://sso/callback',
+      ...(source.SSO_MOBILE_WEB_REDIRECT_URIS || '').split(',').map(value => value.trim()).filter(Boolean)],
   };
 }
 

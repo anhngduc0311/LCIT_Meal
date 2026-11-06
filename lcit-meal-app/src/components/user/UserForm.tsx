@@ -11,6 +11,7 @@ const STATUS_INACTIVE = "0";
 export type UserFormValues = {
     id?: number;
     fullName: string;
+    phone: string;
     username: string;
     password?: string;
     roleId?: number;
@@ -31,6 +32,7 @@ const UserForm: React.FC<Props> = ({
     const isEdit = Boolean(initial?.id);
 
     const [name, setName] = useState(initial?.fullName ?? "");
+    const [phone, setPhone] = useState(initial?.phone ?? "");
     const [username, setUsername] = useState(initial?.username ?? "");
     const [password, setPassword] = useState("");
     const [roleId, setRoleId] = useState<number | "">(
@@ -66,6 +68,7 @@ const UserForm: React.FC<Props> = ({
     useEffect(() => {
         if (!initial) {
             setName("");
+            setPhone("");
             setUsername("");
             setPassword("");
             setRoleId("");
@@ -74,6 +77,7 @@ const UserForm: React.FC<Props> = ({
         }
 
         setName(initial.fullName ?? "");
+        setPhone(initial.phone ?? "");
         setUsername(initial.username ?? "");
         setPassword("");
         setRoleId(
@@ -106,6 +110,7 @@ const UserForm: React.FC<Props> = ({
         onSubmit({
             ...(initial?.id ? { id: initial.id } : {}),
             fullName: name.trim(),
+            phone: phone.trim(),
             username: username.trim(),
             ...(password.trim() ? { password: password.trim() } : {}),
             ...(roleId !== "" ? { roleId: Number(roleId) } : {}),
@@ -202,6 +207,25 @@ const UserForm: React.FC<Props> = ({
                             "
                         />
                         {fieldErrors.name && <p className="mt-1 text-xs text-red-600">✕ {fieldErrors.name}</p>}
+                    </div>
+
+                    <div>
+                        <label htmlFor="user-phone" className="mb-1.5 block text-sm font-medium text-gray-700 dark:text-white/90">
+                            Số điện thoại
+                        </label>
+                        <input
+                            id="user-phone"
+                            type="tel"
+                            autoComplete="tel"
+                            maxLength={32}
+                            value={phone}
+                            onChange={(e) => setPhone(e.target.value)}
+                            placeholder="Nhập số điện thoại (0... hoặc +84...)"
+                            className="block w-full rounded-lg border border-gray-300 bg-white px-3.5 py-2.5 text-sm text-gray-900 outline-none focus:border-brand-500 focus:ring-2 focus:ring-brand-500/20 dark:border-gray-700 dark:bg-gray-800 dark:text-white"
+                        />
+                        <p className="mt-1.5 text-xs text-gray-500 dark:text-gray-400">
+                            Dùng để đối chiếu đăng nhập SSO. Để trống nếu chưa có số đã xác nhận.
+                        </p>
                     </div>
 
                     {/* Username */}

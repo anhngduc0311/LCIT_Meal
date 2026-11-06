@@ -117,6 +117,7 @@ export const authService = {
     // Chuẩn bị payload cho PATCH /api/users/me
     const body: Record<string, unknown> = {};
     if (data.fullName) body.fullName = data.fullName.trim();
+    if (data.phone !== undefined) body.phone = data.phone.trim();
     if (data.password) body.password = data.password;
 
     const updatedUser = await apiClient<User>('/users/me', {

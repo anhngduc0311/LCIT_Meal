@@ -15,6 +15,7 @@ export type UserSearchParams = {
 // (fullName, username, password bắt buộc; roleId, status tùy chọn).
 export type CreateUserRequest = {
   fullName: string;
+  phone?: string | null;
   username: string;
   password: string;
   roleId?: number;

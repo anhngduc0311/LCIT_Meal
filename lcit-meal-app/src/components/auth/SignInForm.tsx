@@ -28,7 +28,8 @@ export default function SignInForm() {
   const [isSsoLoading, setIsSsoLoading] = useState(false);
   const [error, setError] = useState<string | null>(() => {
     const code = new URLSearchParams(window.location.search).get("sso_error");
-    if (code === "unlinked") return "Họ tên SSO không khớp duy nhất với tài khoản đang hoạt động trong Cơm365. Vui lòng liên hệ quản trị.";
+    if (code === "missing_phone") return "Cổng SSO chưa cung cấp số điện thoại hợp lệ để đối chiếu tài khoản Cơm365. Vui lòng liên hệ quản trị SSO.";
+    if (code === "unlinked") return "Số điện thoại SSO không khớp duy nhất với tài khoản đang hoạt động trong Cơm365. Vui lòng liên hệ quản trị.";
     if (code) return "Không hoàn tất được đăng nhập SSO. Vui lòng thử lại.";
     return null;
   });

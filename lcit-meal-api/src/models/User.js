@@ -2,6 +2,7 @@ class User {
   constructor(data) {
     this.id = data.id;
     this.fullName = data.full_name;
+    this.phone = data.phone ?? null;
     this.facilityId = data.facility_id ?? null;
     this.username = data.username;
     this.passwordHash = data.password_hash;

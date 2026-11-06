@@ -62,6 +62,41 @@ async function main() {
   for (const route of ['/users','/roles','/meals','/meal-options','/meal-registrations','/payments','/notifications','/audit-logs','/system-settings']) await req('admin', route);
   await req('employee', '/users', 'GET', undefined, 403);
   await req('admin', '/users?query=QA');
+  // Phone storage is admin-managed; old clients and self-profile edits preserve it.
+  const phoneUser = await req('admin', '/users', 'POST', {
+    fullName: 'QA Phone', username: 'qa_phone', password, phone: '+84 90 123 4567',
+  }, 201);
+  assert.equal(phoneUser.phone, '0901234567');
+  assert.equal((await req('admin', `/users/${phoneUser.id}`)).phone, '0901234567');
+  await req('admin', '/users', 'POST', {
+    fullName: 'QA Duplicate', username: 'qa_duplicate_phone', password, phone: '0901234567',
+  }, 409);
+  await req('admin', `/users/${phoneUser.id}`, 'PUT', { phone: 'invalid' }, 400);
+  assert.equal((await req('admin', `/users/${phoneUser.id}`, 'PUT', { fullName: 'QA Phone Updated' })).phone, '0901234567');
+  await req('manager', `/users/${phoneUser.id}`, 'PUT', { phone: '0909999999' }, 403);
+  await req('admin', `/users/${users.employee}`, 'PUT', { phone: '0912345678' });
+  const ownProfile = await req('employee', '/users/me', 'PATCH', {
+    fullName: 'QA employee', phone: '+84 90 999 9999', username: 'admin', roleId: 1, status: '0',
+  });
+  assert.equal(ownProfile.phone, '0909999999');
+  assert.equal(ownProfile.username, 'employee');
+  assert.equal(ownProfile.status, '1');
+  assert.deepEqual(ownProfile.roles.map(role => role.code), ['employee']);
+  assert.equal((await req('admin', `/users/${users.employee}`)).phone, '0909999999');
+  await req('employee', '/users/me', 'PATCH', { phone: '0901234567' }, 409);
+  await req('employee', '/users/me', 'PATCH', { phone: 'invalid' }, 400);
+  assert.equal((await req('employee', '/users/me', 'PATCH', { fullName: 'QA employee' })).phone, '0909999999');
+  assert.equal((await req('employee', '/users/me', 'PATCH', { phone: '' })).phone, null);
+  await req('employee', '/users/me', 'PATCH', { phone: '0912345678' });
+  const auth = new (require('../../src/services/AuthService'))(new (require('../../src/repos/UserRepository'))(), {});
+  assert.equal((await auth.resolveSsoUser('+84 912 345 678')).id, users.employee);
+  await assert.rejects(auth.resolveSsoUser('0909999999'), { statusCode: 403 });
+  assert.equal((await req('admin', `/users/${phoneUser.id}`, 'PUT', { phone: '' })).phone, null);
+  const batch = await req('admin', '/users/batch', 'POST', { users: [{
+    fullName: 'QA Batch Phone', username: 'qa_batch_phone', password, phone: '0084902222222',
+  }] }, 201);
+  assert.equal(batch.users[0].phone, '0902222222');
+  checks += 8;
   const date = '2098-11-03';
   const meal = await req('admin', '/meals', 'POST', { mealDate: date }, 201);
   await req('admin', '/meals', 'POST', { mealDate: date }, 409);

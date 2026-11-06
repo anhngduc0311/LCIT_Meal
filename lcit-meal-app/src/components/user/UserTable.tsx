@@ -22,6 +22,7 @@ const UserTable: React.FC<Props> = ({ users, onEdit, onDelete, onView, onResetPa
                     <tr className="text-left">
                         <th className="px-4 py-2">Họ tên</th>
                         <th className="px-4 py-2">Tên đăng nhập</th>
+                        <th className="px-4 py-2">Số điện thoại</th>
                         <th className="px-4 py-2">Vai trò</th>
                         <th className="px-4 py-2">Trạng thái</th>
                         <th className="px-4 py-2">Ngày tạo</th>
@@ -33,6 +34,7 @@ const UserTable: React.FC<Props> = ({ users, onEdit, onDelete, onView, onResetPa
                         <tr key={u.id} className="odd:bg-gray-50 dark:odd:bg-gray-800">
                             <td className="px-4 py-3 align-middle">{u.fullName}</td>
                             <td className="px-4 py-3 align-middle">{u.username}</td>
+                            <td className="px-4 py-3 align-middle whitespace-nowrap">{u.phone || "Chưa có"}</td>
                             <td className="px-4 py-3 align-middle">{u.roles.length > 0 ? u.roles[0].displayName : ""}</td>
                             <td className="px-4 py-3 align-middle">{statusLabel(u.status)}</td>
                             <td className="px-4 py-3 align-middle">{formatDate(u.createdAt)}</td>

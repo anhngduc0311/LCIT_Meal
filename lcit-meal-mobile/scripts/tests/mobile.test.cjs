@@ -341,6 +341,24 @@ test('Auth service persists normalized login and clears session even offline', a
   await authService.logout();
   assert.deepEqual(await authService.getStoredSession(), { user: null, token: null });
 });
+test('Profile phone is sent to the API and the server value persists across session reloads', async () => {
+  const profileApp = createTestApp();
+  const { authService } = profileApp.load('services/authService.ts');
+  for (const [input, saved] of [[' +84 90 123 4567 ', '0901234567'], ['', null]]) {
+    global.fetch = async (url, config) => {
+      assert.ok(url.endsWith('/users/me'));
+      assert.equal(config.method, 'PATCH');
+      assert.deepEqual(JSON.parse(config.body), { phone: input.trim() });
+      return respond(200, { success: true, payload: { id: 1, phone: saved, roles: [{ code: 'employee' }] } });
+    };
+    assert.equal((await authService.updateProfile({ phone: input })).phone, saved);
+    assert.equal((await authService.getStoredSession()).user.phone, saved);
+  }
+  global.fetch = async () => respond(409, { success: false, error: { message: 'Số điện thoại đã được dùng cho tài khoản khác.' } });
+  await assert.rejects(authService.updateProfile({ phone: '0909999999' }), { code: 409 });
+  assert.equal((await authService.getStoredSession()).user.phone, null);
+});
+
 test('Mock store preserves registration ID and waits for cancellation approval', () => {
   const { mockStore } = app.load('services/mockStore.ts');
   for (const pending of mockStore.getMyMealOptions().filter(option => option.status === 'pending')) {

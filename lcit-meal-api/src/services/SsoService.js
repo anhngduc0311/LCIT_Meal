@@ -16,6 +16,7 @@ class SsoService {
     this.loadClient = options.loadClient || (() => import('openid-client'));
     this.pending = new Map();
     this.tickets = new Map();
+    this.mobileRequests = new Map();
     this.configurationPromise = null;
   }
 
@@ -29,13 +30,13 @@ class SsoService {
 
   prune() {
     const now = this.clock();
-    for (const store of [this.pending, this.tickets]) {
+    for (const store of [this.pending, this.tickets, this.mobileRequests]) {
       for (const [key, value] of store) if (value.expires <= now) store.delete(key);
     }
   }
 
   assertCapacity() {
-    if (this.pending.size + this.tickets.size >= 1000) throw new AppError('SSO đang bận. Vui lòng thử lại sau.', 503);
+    if (this.pending.size + this.tickets.size + this.mobileRequests.size >= 1000) throw new AppError('SSO đang bận. Vui lòng thử lại sau.', 503);
   }
 
   async configuration() {
@@ -67,7 +68,39 @@ class SsoService {
     return this.configurationPromise;
   }
 
-  async begin() {
+  prepareMobile(redirectUri) {
+    this.assertEnabled();
+    this.prune();
+    this.assertCapacity();
+    const allowed = this.settings.mobileRedirectUris || ['lcitmealmobile://sso/callback'];
+    if (typeof redirectUri !== 'string' || !allowed.includes(redirectUri)) throw new AppError('Đường dẫn trở về app không hợp lệ.', 400);
+    const target = new URL(redirectUri);
+    if (target.search || target.hash || target.username || target.password) throw new AppError('Đường dẫn trở về app không hợp lệ.', 400);
+    const request = random(), verifier = random();
+    this.mobileRequests.set(digest(request), { redirectUri, challenge: digest(verifier), expires: this.clock() + 600000 });
+    const start = new URL(this.settings.redirectUri);
+    start.pathname = start.pathname.replace(/\/callback$/, '/mobile/start');
+    start.search = new URLSearchParams({ request }).toString();
+    return { startUrl: start.toString(), redirectUri, verifier };
+  }
+
+  async beginMobile(request) {
+    this.assertEnabled();
+    this.prune();
+    if (typeof request !== 'string' || !/^[\w-]{43}$/.test(request)) throw new AppError('Phiên SSO không hợp lệ.', 400);
+    const key = digest(request), mobile = this.mobileRequests.get(key);
+    if (!mobile) throw new AppError('Phiên SSO không hợp lệ hoặc đã hết hạn.', 400);
+    this.mobileRequests.delete(key);
+    return this.begin(mobile);
+  }
+
+  mobileTarget(redirectUri, values) {
+    const target = new URL(redirectUri);
+    target.search = new URLSearchParams(values).toString();
+    return target.toString();
+  }
+
+  async begin(mobile) {
     this.assertEnabled();
     this.prune();
     this.assertCapacity();
@@ -76,12 +109,13 @@ class SsoService {
     const verifier = oidc.randomPKCECodeVerifier();
     const challenge = await oidc.calculatePKCECodeChallenge(verifier);
     const authorization = oidc.buildAuthorizationUrl(config, {
-      response_type: 'code', response_mode: 'query', scope: 'openid profile',
+      response_type: 'code', response_mode: 'query', scope: 'openid phone',
+      claims: JSON.stringify({ userinfo: { sdt: { essential: true } } }),
       redirect_uri: this.settings.redirectUri, state, nonce,
       code_challenge: challenge, code_challenge_method: 'S256',
     });
     this.assertCapacity();
-    this.pending.set(state, { cookieHash: digest(cookie), nonce, verifier, expires: this.clock() + 10 * 60 * 1000 });
+    this.pending.set(state, { cookieHash: digest(cookie), nonce, verifier, mobile, expires: this.clock() + 10 * 60 * 1000 });
     return { authorization: authorization.toString(), cookie };
   }
 
@@ -89,8 +123,9 @@ class SsoService {
     this.assertEnabled();
     this.prune();
     const url = new URL(callbackUrl);
+    const denied = url.searchParams.getAll('error').length === 1 && url.searchParams.getAll('code').length === 0;
     if (url.origin !== new URL(this.settings.redirectUri).origin || url.pathname !== new URL(this.settings.redirectUri).pathname
-      || url.searchParams.getAll('state').length !== 1 || url.searchParams.getAll('code').length !== 1) {
+      || url.searchParams.getAll('state').length !== 1 || (!denied && url.searchParams.getAll('code').length !== 1)) {
       throw new AppError('Phản hồi SSO không hợp lệ.', 400);
     }
     const state = url.searchParams.get('state');
@@ -99,6 +134,12 @@ class SsoService {
       throw new AppError('Phiên đăng nhập SSO không hợp lệ hoặc đã hết hạn.', 400);
     }
     this.pending.delete(state);
+    try {
+    if (denied) {
+      const error = new AppError('Đăng nhập SSO đã bị hủy.', 400);
+      error.ssoCode = url.searchParams.get('error') === 'access_denied' ? 'cancelled' : 'invalid_response';
+      throw error;
+    }
     const { oidc, config, metadata } = await this.configuration();
     const tokens = await oidc.authorizationCodeGrant(config, url, {
       expectedState: state, expectedNonce: flow.nonce, pkceCodeVerifier: flow.verifier, idTokenExpected: true,
@@ -113,14 +154,32 @@ class SsoService {
     if (!userResponse.ok) throw new Error('OIDC UserInfo failed');
     const info = await userResponse.json();
     if (info.sub !== claims.sub) throw new AppError('Danh tính SSO không khớp.', 401);
-    const user = await this.authService.resolveSsoUser(info.name);
+    const user = await this.authService.resolveSsoUser(info.sdt);
     const ticket = random();
     this.prune();
     this.assertCapacity();
-    this.tickets.set(digest(ticket), { userId: user.id, fullName: info.name, cookieHash: flow.cookieHash, expires: this.clock() + 60000 });
+    this.tickets.set(digest(ticket), { userId: user.id, phone: info.sdt, cookieHash: flow.cookieHash,
+      mobileChallenge: flow.mobile?.challenge, expires: this.clock() + 60000 });
+    if (flow.mobile) return this.mobileTarget(flow.mobile.redirectUri, { ticket });
     const target = new URL('/auth/sso/callback', this.settings.frontendOrigin);
     target.hash = new URLSearchParams({ ticket }).toString();
     return target.toString();
+    } catch (error) {
+      if (flow.mobile) error.mobileReturn = this.mobileTarget(flow.mobile.redirectUri,
+        { error: ['unlinked', 'missing_phone', 'cancelled'].includes(error.ssoCode) ? error.ssoCode : 'invalid_response' });
+      throw error;
+    }
+  }
+
+  async exchangeMobile(ticket, verifier, meta) {
+    this.assertEnabled();
+    this.prune();
+    if (typeof ticket !== 'string' || !/^[\w-]{43}$/.test(ticket)
+      || typeof verifier !== 'string' || !/^[\w-]{43}$/.test(verifier)) throw new AppError('Yêu cầu SSO không hợp lệ.', 400);
+    const key = digest(ticket), flow = this.tickets.get(key);
+    if (!flow?.mobileChallenge || !boundTo(flow.mobileChallenge, verifier)) throw new AppError('Phiên SSO không hợp lệ hoặc đã hết hạn.', 400);
+    this.tickets.delete(key);
+    return this.authService.loginSsoUser(flow.userId, flow.phone, meta);
   }
 
   async exchange(ticket, cookie, origin, meta) {
@@ -130,11 +189,11 @@ class SsoService {
       throw new AppError('Yêu cầu SSO không hợp lệ.', 400);
     }
     const key = digest(ticket), flow = this.tickets.get(key);
-    if (!flow || flow.expires <= this.clock() || !boundTo(flow.cookieHash, cookie)) {
+    if (!flow || flow.mobileChallenge || flow.expires <= this.clock() || !boundTo(flow.cookieHash, cookie)) {
       throw new AppError('Phiên đăng nhập SSO không hợp lệ hoặc đã hết hạn.', 400);
     }
     this.tickets.delete(key);
-    return this.authService.loginSsoUser(flow.userId, flow.fullName, meta);
+    return this.authService.loginSsoUser(flow.userId, flow.phone, meta);
   }
 }
 

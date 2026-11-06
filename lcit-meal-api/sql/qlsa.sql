@@ -205,6 +205,7 @@ CREATE TABLE `system_setting` (
 CREATE TABLE `user` (
   `id` int(10) UNSIGNED NOT NULL,
   `full_name` varchar(150) NOT NULL,
+  `phone` varchar(32) DEFAULT NULL,
   `username` varchar(100) NOT NULL,
   `password_hash` varchar(255) NOT NULL,
   `auth_key` varchar(32) NOT NULL,
