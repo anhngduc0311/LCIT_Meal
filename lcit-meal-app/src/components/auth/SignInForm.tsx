@@ -28,7 +28,7 @@ export default function SignInForm() {
   const [isSsoLoading, setIsSsoLoading] = useState(false);
   const [error, setError] = useState<string | null>(() => {
     const code = new URLSearchParams(window.location.search).get("sso_error");
-    if (code === "unlinked") return "Tài khoản SSO chưa được liên kết với Cơm365. Vui lòng liên hệ quản trị.";
+    if (code === "unlinked") return "Họ tên SSO không khớp duy nhất với tài khoản đang hoạt động trong Cơm365. Vui lòng liên hệ quản trị.";
     if (code) return "Không hoàn tất được đăng nhập SSO. Vui lòng thử lại.";
     return null;
   });

@@ -11,12 +11,14 @@ const AuthService = require('../../src/services/AuthService');
 const ssoRoutes = require('../../src/routes/SsoRoutes');
 const { loadSsoSettings, validSsoSettings } = require('../../src/config/sso');
 
+process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
+
 const { privateKey, publicKey } = crypto.generateKeyPairSync('rsa', { modulusLength: 2048 });
 const settings = {
   enabled: true, issuer: 'https://login.yenbai.gov.vn:443/oauth2/token',
   discoveryUrl: 'https://login.yenbai.gov.vn/oauth2/oidcdiscovery/.well-known/openid-configuration',
   clientId: 'com365-test-client', clientSecret: 'test-secret-not-a-real-credential', tokenAuthMethod: 'client_secret_post',
-  redirectUri: 'https://com365.lcit.vn:4002/api/auth/sso/callback', frontendOrigin: 'https://com365.lcit.vn', accountLinksFile: '/test/links.json',
+  redirectUri: 'https://com365.lcit.vn:4002/api/auth/sso/callback', frontendOrigin: 'https://com365.lcit.vn',
 };
 const json = body => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } });
 
@@ -55,7 +57,7 @@ async function fixture(options = {}) {
     if (parsed.pathname === '/oauth2/userinfo') {
       assert.equal(init.method, 'POST');
       assert.equal(new Headers(init.headers).get('authorization'), 'Bearer provider-access-token');
-      return json({ sub: options.userInfoSub || 'pairwise-identity' });
+      return json({ sub: options.userInfoSub || 'pairwise-identity', name: 'Nguyễn Tiến Đạt', ...options.userInfo });
     }
     throw Error('Unexpected provider request');
   };
@@ -64,12 +66,12 @@ async function fixture(options = {}) {
     config[oidc.customFetch] = providerFetch;
     return config;
   }
-  const auth = { async loginLinkedUser(userId) { sessions.push(userId); return { user: { id: userId }, accessToken: 'local-session-token' }; } };
+  const users = options.users || [{ id: 7, fullName: 'Nguyễn Tiến Đạt', status: '1', roles: [{ code: 'employee' }] }];
+  const auth = new AuthService({ list: async () => users, updateAccessToken: async userId => sessions.push(userId) }, { create: async () => {} });
   const service = new SsoService({ ...settings, ...options.settings }, auth, {
     clock: () => now,
     loadClient: async () => ({ ...oidc, Configuration: TestConfiguration }),
     fetch: async () => json(metadata),
-    readFile: async () => JSON.stringify(options.links || [{ issuer: settings.issuer, subject: 'pairwise-identity', userId: 7 }]),
   });
   const begin = async () => {
     const result = await service.begin();
@@ -79,7 +81,7 @@ async function fixture(options = {}) {
     callback.search = new URLSearchParams({ state: authorization.searchParams.get('state'), code: 'one-time-code' }).toString();
     return { ...result, authorization, callback };
   };
-  return { service, begin, calls, sessions, advance: milliseconds => { now += milliseconds; } };
+  return { service, begin, calls, sessions, users, advance: milliseconds => { now += milliseconds; } };
 }
 
 test('SSO defaults to disabled and requires HTTPS callback and dedicated client credentials', () => {
@@ -144,14 +146,31 @@ test('Provider metadata cannot change issuer or send credentials to another host
   }
 });
 
-test('Unknown identities and ambiguous account links do not create users or inherit provider roles', async () => {
-  for (const links of [[], [{ issuer: settings.issuer, subject: 'pairwise-identity', userId: 7 },
-    { issuer: settings.issuer, subject: 'pairwise-identity', userId: 8 }]]) {
-    const f = await fixture({ links });
+test('Only a unique active full name matches; missing, different, ambiguous or locked names fail closed', async () => {
+  for (const options of [
+    { users: [] }, { userInfo: { name: undefined } }, { userInfo: { name: 'Nguyen Tien Dat' } },
+    { userInfo: { name: 'Nguyễn Tiến' } }, { userInfo: { name: 123 } },
+    { users: [{ id: 7, fullName: 'Nguyễn Tiến Đạt', status: '0' }] },
+    { users: [{ id: 7, fullName: 'Nguyễn Tiến Đạt', status: '1' }, { id: 8, fullName: ' NGUYỄN  TIẾN ĐẠT ', status: '1' }] },
+  ]) {
+    const f = await fixture(options);
     const start = await f.begin();
     await assert.rejects(f.service.finish(start.callback, start.cookie), { statusCode: 403 });
+    assert.equal(f.service.tickets.size, 0);
     assert.equal(f.sessions.length, 0);
   }
+});
+
+test('Case, whitespace and Unicode normalization match users from any facility without changing roles', async () => {
+  const f = await fixture({ userInfo: { name: '  NGUYỄN   TIẾN ĐẠT '.normalize('NFD'), groups: ['admin'] },
+    users: [{ id: 7, fullName: 'Nguyễn Tiến Đạt', facilityId: 2, status: '1', roles: [{ code: 'employee' }] }] });
+  const start = await f.begin();
+  assert.equal(start.authorization.searchParams.get('scope'), 'openid profile');
+  const target = await f.service.finish(start.callback, start.cookie);
+  const ticket = new URLSearchParams(new URL(target).hash.slice(1)).get('ticket');
+  const result = await f.service.exchange(ticket, start.cookie, settings.frontendOrigin);
+  assert.deepEqual(result.user.roles, [{ code: 'employee' }]);
+  assert.equal(result.user.facilityId, 2);
 });
 
 test('Handoff tickets expire after one minute', async () => {
@@ -164,25 +183,20 @@ test('Handoff tickets expire after one minute', async () => {
   assert.equal(f.sessions.length, 0);
 });
 
-test('Unlinked identities create a private request ID for the exact verified browser flow', async () => {
-  const folder = await fs.mkdtemp(path.join(os.tmpdir(), 'com365-sso-test-'));
-  const file = path.join(folder, 'requests.json');
-  const f = await fixture({ links: [], settings: { linkRequestsFile: file } });
-  try {
+test('A ticket is rejected if the matched account is renamed, locked, duplicated or replaced before exchange', async () => {
+  for (const change of [
+    users => { users[0].fullName = 'Một người khác'; },
+    users => { users[0].status = '0'; },
+    users => { users.push({ ...users[0], id: 8 }); },
+    users => { users[0].id = 8; },
+  ]) {
+    const f = await fixture();
     const start = await f.begin();
-    let captured;
-    try { await f.service.finish(start.callback, start.cookie); }
-    catch (error) { captured = error; }
-    assert.equal(captured.ssoCode, 'unlinked');
-    const rows = JSON.parse(await fs.readFile(file, 'utf8'));
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0].requestId, captured.ssoRequestId);
-    assert.equal(rows[0].subject, 'pairwise-identity');
-    assert.equal(JSON.stringify(rows).includes('provider-access-token'), false);
+    const target = await f.service.finish(start.callback, start.cookie);
+    const ticket = new URLSearchParams(new URL(target).hash.slice(1)).get('ticket');
+    change(f.users);
+    await assert.rejects(f.service.exchange(ticket, start.cookie, settings.frontendOrigin), { statusCode: 403 });
     assert.equal(f.sessions.length, 0);
-  } finally {
-    await fs.unlink(file).catch(() => {});
-    await fs.rmdir(folder);
   }
 });
 
@@ -195,17 +209,17 @@ test('Temporary flow storage has a fixed capacity and removes expired entries', 
   assert.equal(f.service.pending.size, 1);
 });
 
-test('Linked users must still be active and keep their existing local roles', async () => {
+test('Name-matched users must still be active and keep their existing local roles', async () => {
   let saved = 0;
-  const user = { id: 7, username: 'employee', status: '0', roles: [{ code: 'employee' }] };
-  const auth = new AuthService({ get: async () => user, updateAccessToken: async () => saved++ }, { create: async () => {} });
-  await assert.rejects(auth.loginLinkedUser(7), { statusCode: 403 });
+  const user = { id: 7, fullName: 'Nguyễn Tiến Đạt', username: 'employee', status: '0', roles: [{ code: 'employee' }] };
+  const auth = new AuthService({ list: async () => [user], updateAccessToken: async () => saved++ }, { create: async () => {} });
+  await assert.rejects(auth.loginSsoUser(7, 'Nguyễn Tiến Đạt'), { statusCode: 403 });
   assert.equal(saved, 0);
   user.status = '1';
   const previousSecret = process.env.JWT_SECRET;
   process.env.JWT_SECRET = crypto.randomBytes(32).toString('hex');
   try {
-    const result = await auth.loginLinkedUser(7);
+    const result = await auth.loginSsoUser(7, 'Nguyễn Tiến Đạt');
     assert.deepEqual(result.user.roles, [{ code: 'employee' }]);
     assert.equal(jwt.verify(result.accessToken, process.env.JWT_SECRET).id, 7);
     assert.equal(saved, 1);

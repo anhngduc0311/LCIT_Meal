@@ -37,8 +37,6 @@ module.exports = function ssoRoutes(service) {
       if (!service.status().enabled) return ApiResponse.error(res, 'Đăng nhập SSO chưa được cấu hình.', 503);
       const target = new URL('/login', service.settings.frontendOrigin);
       target.searchParams.set('sso_error', error.ssoCode === 'unlinked' ? 'unlinked' : 'invalid_response');
-      if (error.ssoCode === 'unlinked' && typeof error.ssoRequestId === 'string'
-        && /^[0-9a-f-]{36}$/.test(error.ssoRequestId)) target.searchParams.set('sso_link_request', error.ssoRequestId);
       return res.redirect(target.toString());
     }
   });

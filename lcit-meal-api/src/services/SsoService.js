@@ -1,5 +1,4 @@
 const crypto = require('node:crypto');
-const fs = require('node:fs/promises');
 const AppError = require('../ultis/AppError');
 const { validSsoSettings } = require('../config/sso');
 
@@ -15,11 +14,9 @@ class SsoService {
     this.clock = options.clock || Date.now;
     this.fetch = options.fetch || global.fetch;
     this.loadClient = options.loadClient || (() => import('openid-client'));
-    this.readFile = options.readFile || (file => fs.readFile(file, 'utf8'));
     this.pending = new Map();
     this.tickets = new Map();
     this.configurationPromise = null;
-    this.linkRequestQueue = Promise.resolve();
   }
 
   status() {
@@ -79,49 +76,13 @@ class SsoService {
     const verifier = oidc.randomPKCECodeVerifier();
     const challenge = await oidc.calculatePKCECodeChallenge(verifier);
     const authorization = oidc.buildAuthorizationUrl(config, {
-      response_type: 'code', response_mode: 'query', scope: 'openid',
+      response_type: 'code', response_mode: 'query', scope: 'openid profile',
       redirect_uri: this.settings.redirectUri, state, nonce,
       code_challenge: challenge, code_challenge_method: 'S256',
     });
     this.assertCapacity();
     this.pending.set(state, { cookieHash: digest(cookie), nonce, verifier, expires: this.clock() + 10 * 60 * 1000 });
     return { authorization: authorization.toString(), cookie };
-  }
-
-  async linkedUserId(issuer, subject) {
-    const links = JSON.parse(await this.readFile(this.settings.accountLinksFile));
-    if (!Array.isArray(links)) throw new Error('Invalid SSO account links');
-    const found = links.filter(link => link.issuer === issuer && link.subject === subject);
-    if (found.length !== 1 || !Number.isSafeInteger(found[0].userId) || found[0].userId < 1) {
-      const requestId = found.length === 0 ? await this.recordLinkRequest(issuer, subject) : null;
-      const error = new AppError('Tài khoản SSO chưa được liên kết với Cơm365. Vui lòng liên hệ quản trị.', 403);
-      error.ssoCode = 'unlinked';
-      if (requestId) error.ssoRequestId = requestId;
-      throw error;
-    }
-    return found[0].userId;
-  }
-
-  // Optional, administrator-only onboarding queue. These entries never grant access.
-  async recordLinkRequest(issuer, subject) {
-    const file = this.settings.linkRequestsFile;
-    if (!file) return null;
-    const requestId = crypto.randomUUID();
-    this.linkRequestQueue = this.linkRequestQueue.catch(() => {}).then(async () => {
-      let entries;
-      try { entries = JSON.parse(await fs.readFile(file, 'utf8')); }
-      catch (error) { if (error.code !== 'ENOENT') throw error; entries = []; }
-      if (!Array.isArray(entries)) throw new Error('Invalid SSO link request file');
-      const entry = { requestId, issuer, subject, requestedAt: new Date(this.clock()).toISOString() };
-      entries = entries.slice(-99);
-      entries.push(entry);
-      const temporary = `${file}.${crypto.randomUUID()}.tmp`;
-      await fs.writeFile(temporary, JSON.stringify(entries, null, 2), { mode: 0o600, flag: 'wx' });
-      await fs.rename(temporary, file);
-    });
-    // Onboarding diagnostics are optional; an unlinked identity still fails closed.
-    try { await this.linkRequestQueue; return requestId; }
-    catch { return null; }
   }
 
   async finish(callbackUrl, cookie) {
@@ -152,11 +113,11 @@ class SsoService {
     if (!userResponse.ok) throw new Error('OIDC UserInfo failed');
     const info = await userResponse.json();
     if (info.sub !== claims.sub) throw new AppError('Danh tính SSO không khớp.', 401);
-    const userId = await this.linkedUserId(claims.iss, claims.sub);
+    const user = await this.authService.resolveSsoUser(info.name);
     const ticket = random();
     this.prune();
     this.assertCapacity();
-    this.tickets.set(digest(ticket), { userId, cookieHash: flow.cookieHash, expires: this.clock() + 60000 });
+    this.tickets.set(digest(ticket), { userId: user.id, fullName: info.name, cookieHash: flow.cookieHash, expires: this.clock() + 60000 });
     const target = new URL('/auth/sso/callback', this.settings.frontendOrigin);
     target.hash = new URLSearchParams({ ticket }).toString();
     return target.toString();
@@ -173,7 +134,7 @@ class SsoService {
       throw new AppError('Phiên đăng nhập SSO không hợp lệ hoặc đã hết hạn.', 400);
     }
     this.tickets.delete(key);
-    return this.authService.loginLinkedUser(flow.userId, meta);
+    return this.authService.loginSsoUser(flow.userId, flow.fullName, meta);
   }
 }
 

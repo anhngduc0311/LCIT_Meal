@@ -5,6 +5,7 @@ const crypto = require('node:crypto');
 const USER_STATUS = require("../constants/UserStatus");
 const LOG_ACTION = require("../constants/LogAction");
 const AppError = require("../ultis/AppError");
+const ssoName = require('../ultis/ssoName');
 
 class AuthService {
   constructor(userRepository, auditLogService) {
@@ -37,12 +38,22 @@ class AuthService {
     return this.createSession(user, meta);
   }
 
-  // Only called after a validated OIDC identity has an explicit account link.
-  async loginLinkedUser(userId, meta = {}) {
-    const user = await this.userRepository.get(userId);
-    if (!user || String(user.status) !== String(USER_STATUS.STATUS_ACTIVE)) {
-      throw new AppError('Tài khoản không hoạt động', 403);
+  // The name must come from UserInfo after OIDC signature and subject validation.
+  async resolveSsoUser(fullName) {
+    const name = ssoName(fullName);
+    const matches = name ? (await this.userRepository.list()).filter(user => ssoName(user.fullName) === name) : [];
+    if (matches.length !== 1 || String(matches[0].status) !== String(USER_STATUS.STATUS_ACTIVE)) {
+      const error = new AppError('Tài khoản SSO không khớp duy nhất với tài khoản đang hoạt động trong Cơm365.', 403);
+      error.ssoCode = 'unlinked';
+      throw error;
     }
+    return matches[0];
+  }
+
+  async loginSsoUser(userId, fullName, meta = {}) {
+    // Recheck matching, status and local roles when the browser redeems its ticket.
+    const user = await this.resolveSsoUser(fullName);
+    if (user.id !== userId) throw new AppError('Tài khoản SSO đã thay đổi. Vui lòng đăng nhập lại.', 403);
     return this.createSession(user, meta);
   }
 

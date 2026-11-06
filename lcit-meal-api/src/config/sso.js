@@ -9,13 +9,11 @@ function loadSsoSettings(source = process.env) {
     tokenAuthMethod: source.SSO_TOKEN_AUTH_METHOD || 'client_secret_post',
     redirectUri: source.SSO_REDIRECT_URI || '',
     frontendOrigin: source.SSO_FRONTEND_ORIGIN || '',
-    accountLinksFile: source.SSO_ACCOUNT_LINKS_FILE || '',
-    linkRequestsFile: source.SSO_LINK_REQUESTS_FILE || '',
   };
 }
 
 function validSsoSettings(settings) {
-  if (!settings.enabled || !settings.clientId || !settings.clientSecret || !settings.accountLinksFile) return false;
+  if (!settings.enabled || !settings.clientId || !settings.clientSecret) return false;
   if (!['client_secret_post', 'client_secret_basic'].includes(settings.tokenAuthMethod)) return false;
   try {
     for (const value of [settings.discoveryUrl, settings.issuer, settings.redirectUri, settings.frontendOrigin]) {
