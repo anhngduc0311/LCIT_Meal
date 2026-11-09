@@ -50,6 +50,16 @@ import { FacilitySelector } from '../../src/components/common/FacilitySelector';
 import { useFacilities } from '../../src/hooks/useFacilities';
 import { FacilityFilter, facilityLabel, getFacility, matchesFacility } from '../../src/utils/facilities';
 
+const ACTIVE_USER_STATUS = '1';
+const LOCKED_USER_STATUS = '2';
+
+function normalizeUserStatus(status: User['status']) {
+  const value = String(status);
+  if (value === 'active' || value === 'acitve') return ACTIVE_USER_STATUS;
+  if (value === 'locked') return LOCKED_USER_STATUS;
+  return value;
+}
+
 export default function ManagementUsersScreen() {
   const router = useRouter();
   const { user: currentUser, role, isMockMode } = useAuth();
@@ -78,7 +88,7 @@ export default function ManagementUsersScreen() {
   const [formEmail, setFormEmail] = useState('');
   const [formPhone, setFormPhone] = useState('');
   const [formRoleId, setFormRoleId] = useState<number>(3); // Default 3: employee
-  const [formStatus, setFormStatus] = useState<string>('active');
+  const [formStatus, setFormStatus] = useState<string>(ACTIVE_USER_STATUS);
 
   // Username validation state
   const [usernameError, setUsernameError] = useState('');
@@ -180,7 +190,7 @@ export default function ManagementUsersScreen() {
         email: formEmail.trim() || undefined,
         phone: formPhone.trim() || undefined,
         roleId: formRoleId,
-        status: formStatus,
+        status: ACTIVE_USER_STATUS,
       });
       setIsCreateOpen(false);
       setFormFullName('');
@@ -251,7 +261,7 @@ export default function ManagementUsersScreen() {
   const renderUserItem = useCallback(
     ({ item: u }: { item: User }) => {
       const userRole = extractUserRole(u);
-      const isActive = String(u.status) === 'active' || String(u.status) === '1';
+      const isActive = normalizeUserStatus(u.status) === ACTIVE_USER_STATUS;
       return (
         <Card key={u.id} variant="elevated" padding="md" style={styles.userCard}>
           <View style={styles.userHeader}>
@@ -304,7 +314,7 @@ export default function ManagementUsersScreen() {
                   setFormFullName(u.fullName);
                   setFormEmail(u.email || '');
                   setFormPhone(u.phone || '');
-                  setFormStatus(String(u.status));
+                  setFormStatus(normalizeUserStatus(u.status));
                   const rId =
                     userRole === 'admin' ? 1 : userRole === 'manager' ? 2 : userRole === 'kitchen' ? 4 : 3;
                   setFormRoleId(rId);
@@ -356,7 +366,7 @@ export default function ManagementUsersScreen() {
     setFormEmail('');
     setFormPhone('');
     setFormRoleId(3);
-    setFormStatus('active');
+    setFormStatus(ACTIVE_USER_STATUS);
     setUsernameError('');
     setIsCreateOpen(true);
   };
@@ -631,8 +641,8 @@ export default function ManagementUsersScreen() {
               <Text style={styles.sectionLabel}>Trạng thái tài khoản:</Text>
               <View style={styles.statusRow}>
                 {[
-                  { id: 'active', label: 'Hoạt động' },
-                  { id: 'locked', label: 'Khóa tài khoản' },
+                  { id: ACTIVE_USER_STATUS, label: 'Hoạt động' },
+                  { id: LOCKED_USER_STATUS, label: 'Khóa tài khoản' },
                 ].map((s) => (
                   <TouchableOpacity
                     key={s.id}

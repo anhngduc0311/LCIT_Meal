@@ -142,7 +142,7 @@ Nguồn: [src/routes/api.js](src/routes/api.js), các file *Routes.js. API chạ
 | Thao tác | Trường service xử lý |
 |---|---|
 | Login | username, password |
-| Tạo user | fullName, username, password; roleId/status tùy chọn |
+| Tạo user | fullName, username, password; roleId/status tùy chọn. Mặc định status là `1`. API chuẩn hóa `active` và `acitve` thành `1`, `inactive` thành `0`, `locked` thành `2`. Giá trị ngoài các mã `1`, `0`, `2`, `-1` và các tên tương ứng bị từ chối với HTTP 400. |
 | Batch user | { users: [...] }; dòng có fullName, username, password, roleId hoặc role/roleCode, status |
 | Tạo meal | mealDate, note, status |
 | Đăng ký | mealId, guestCount; userId tùy chọn, bỏ thì dùng actor |
@@ -164,7 +164,7 @@ Các ca sau là kế hoạch trên database thử, **chưa chạy/đánh dấu �
 | ID | Kịch bản | Kết quả đối chiếu |
 |---|---|---|
 | AC-01 | Login, gọi route bảo vệ, logout, gọi lại | Có accessToken; sau logout bị từ chối |
-| AC-02 | Employee POST users; Admin tạo user | Employee 403; Admin qua kiểm quyền/validation |
+| AC-02 | Employee POST users; Admin tạo user | Employee 403. Tài khoản do Admin tạo với status bỏ trống, `active` hoặc `acitve` được lưu với status `1`. |
 | AC-03 | Batch hợp lệ và dòng trùng/sai role | Hợp lệ tạo user/role; lỗi bị từ chối; kiểm rollback với DB thật |
 | AC-04 | Tạo meal trùng ngày | Không có hai hàng cùng ngày |
 | AC-05 | Auto-schedule hai lần tuần tự cùng tháng | Không thêm hàng đã có; giữ status cũ |

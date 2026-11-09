@@ -9,6 +9,16 @@ const normalizePhone = require('../ultis/normalizePhone');
 
 const SALT_ROUNDS = 10;
 
+function resolveUserStatus(value, fallback) {
+  if (value == null || value === "") return fallback;
+  const status = String(value);
+  if (status === "active" || status === "acitve") return USER_STATUS.STATUS_ACTIVE;
+  if (status === "inactive") return USER_STATUS.STATUS_INACTIVE;
+  if (status === "locked") return USER_STATUS.STATUS_BANNED;
+  if (Object.values(USER_STATUS).includes(status)) return status;
+  throw new AppError("Trạng thái người dùng không hợp lệ", 400);
+}
+
 class UserService {
   constructor(userRepository, roleRepository, auditLogService) {
     this.userRepository = userRepository;
@@ -46,6 +56,7 @@ class UserService {
 
   async create(data, actor = {}) {
     await this.validateCreateData(data);
+    const status = resolveUserStatus(data.status, USER_STATUS.STATUS_ACTIVE);
     const phone = await this.preparePhone(data.phone);
 
     const passwordHash = await bcrypt.hash(data.password, SALT_ROUNDS);
@@ -58,7 +69,7 @@ class UserService {
       passwordHash,
       authKey,
       accessToken: null,
-      status: data.status || USER_STATUS.STATUS_ACTIVE,
+      status,
       createdBy: actor.actorId || null,
     });
 
@@ -206,6 +217,7 @@ class UserService {
       throw new AppError("Tài khoản không tồn tại", 404);
     }
 
+    const status = resolveUserStatus(data.status, user.status);
     const passwordHash = data.password
       ? await bcrypt.hash(data.password, SALT_ROUNDS)
       : user.passwordHash;
@@ -215,7 +227,7 @@ class UserService {
       phone: data.phone === undefined ? user.phone : await this.preparePhone(data.phone, id),
       username: data.username || user.username,
       passwordHash,
-      status: data.status || user.status,
+      status,
       updatedBy: actor.actorId || null,
     });
 
