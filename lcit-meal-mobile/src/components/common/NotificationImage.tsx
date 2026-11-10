@@ -10,7 +10,10 @@ export function isNotificationImage(url?: string | null): boolean {
   return Boolean(url?.startsWith('/notification-images/'));
 }
 
-export function NotificationImage({ notification }: { notification: NotificationItem }) {
+export function NotificationImage({ notification, height = 180 }: {
+  notification: NotificationItem;
+  height?: number;
+}) {
   const { token } = useAuth();
   const [baseUrl, setBaseUrl] = useState('');
   const hasAttachment = isNotificationImage(notification.url);
@@ -36,7 +39,7 @@ export function NotificationImage({ notification }: { notification: Notification
       cachePolicy="none"
       contentFit="contain"
       accessibilityLabel="Ảnh đính kèm thông báo"
-      style={{ width: '100%', height: 180, marginTop: spacing.sm, borderRadius: radius.md }}
+      style={{ width: '100%', height, marginTop: spacing.sm, borderRadius: radius.md }}
     />
   );
 }

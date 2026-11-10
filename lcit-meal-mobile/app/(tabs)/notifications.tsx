@@ -4,18 +4,22 @@
  * TỐI ƯU HÓA: FlatList virtualization mượt mà.
  */
 
-import React, { useCallback } from 'react';
+import React, { useCallback, useState } from 'react';
 import {
   View,
   Text,
   TouchableOpacity,
   StyleSheet,
   FlatList,
+  Modal,
+  useWindowDimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Header } from '../../src/components/common/Header';
 import { Card } from '../../src/components/common/Card';
+import { ModalBackdrop } from '../../src/components/common/ModalBackdrop';
+import { ModalCard } from '../../src/components/common/ModalCard';
 import { NotificationImage } from '../../src/components/common/NotificationImage';
 import { EmptyState } from '../../src/components/states/EmptyState';
 import {
@@ -27,9 +31,12 @@ import { formatDateTime } from '../../src/utils/formatters';
 import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
+import { radius } from '../../src/theme/radius';
 import { NotificationItem } from '../../src/types';
 
 export default function NotificationsScreen() {
+  const [selected, setSelected] = useState<NotificationItem | null>(null);
+  const { height } = useWindowDimensions();
   // Queries & Mutations
   const {
     data: notifications = [],
@@ -44,9 +51,10 @@ export default function NotificationsScreen() {
     await refetchNotifications();
   };
 
-  const handleMarkAsSeen = useCallback(
-    (id: number) => {
-      markSeenMutation.mutate(id);
+  const openNotification = useCallback(
+    (item: NotificationItem) => {
+      setSelected(item);
+      if (!item.isSeen) markSeenMutation.mutate(item.id);
     },
     [markSeenMutation]
   );
@@ -65,7 +73,7 @@ export default function NotificationsScreen() {
         <Card
           variant="elevated"
           padding="lg"
-          onPress={() => handleMarkAsSeen(item.id)}
+          onPress={() => openNotification(item)}
           style={[styles.notifCard, isUnread && styles.notifCardUnread]}
         >
           <View style={styles.cardRow}>
@@ -111,7 +119,7 @@ export default function NotificationsScreen() {
         </Card>
       );
     },
-    [handleMarkAsSeen]
+    [openNotification]
   );
 
   const ListHeader = (
@@ -158,11 +166,74 @@ export default function NotificationsScreen() {
         maxToRenderPerBatch={10}
         windowSize={5}
       />
+      {selected && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setSelected(null)}>
+          <ModalBackdrop style={styles.detailBackdrop}>
+            <ModalCard style={styles.detailCard} accessibilityViewIsModal>
+              <View style={styles.detailHeader}>
+                <Text accessibilityRole="header" style={styles.detailTitle}>{selected.title}</Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel="Đóng thông báo"
+                  onPress={() => setSelected(null)}
+                  style={styles.detailClose}
+                >
+                  <Ionicons name="close" size={24} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.detailTime}>{formatDateTime(selected.createdAt)}</Text>
+              <Text style={styles.detailBody}>{selected.content}</Text>
+              <NotificationImage notification={selected} height={Math.min(480, Math.round(height * 0.55))} />
+            </ModalCard>
+          </ModalBackdrop>
+        </Modal>
+      )}
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  detailBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.overlay,
+  },
+  detailCard: {
+    width: '100%',
+    maxWidth: 680,
+    padding: spacing.lg,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+  },
+  detailHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  detailTitle: {
+    flex: 1,
+    fontSize: typography.sizes.lg,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+  },
+  detailClose: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  detailTime: {
+    color: colors.textMuted,
+    fontSize: typography.sizes.xs,
+    marginBottom: spacing.sm,
+  },
+  detailBody: {
+    color: colors.text,
+    fontSize: typography.sizes.sm,
+    lineHeight: 22,
+  },
   listContent: {
     paddingBottom: spacing['3xl'],
   },
