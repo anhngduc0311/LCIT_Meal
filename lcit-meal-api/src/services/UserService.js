@@ -6,6 +6,7 @@ const ROLE = require("../constants/Role");
 const LOG_ACTION = require("../constants/LogAction");
 const AppError = require("../ultis/AppError");
 const normalizePhone = require('../ultis/normalizePhone');
+const { registerNewUsers } = require('../jobs/autoScheduleJob');
 
 const SALT_ROUNDS = 10;
 
@@ -97,6 +98,7 @@ class UserService {
       createdUser,
     );
 
+    await registerNewUsers([createdUser]);
     return createdUser;
   }
 
@@ -182,12 +184,9 @@ class UserService {
       { userIds },
     );
 
-    return {
-      count: userIds.length,
-      users: await Promise.all(
-        userIds.map((id) => this.userRepository.get(id)),
-      ),
-    };
+    const users = await Promise.all(userIds.map((id) => this.userRepository.get(id)));
+    await registerNewUsers(users);
+    return { count: userIds.length, users };
   }
 
   async validateCreateData(data) {

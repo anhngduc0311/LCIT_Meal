@@ -1,7 +1,7 @@
 {
   "expo": {
     "name": "LCIT Meal",
-    "slug": "lcit-meal-mobile",
+    "slug": "lcitmeal",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -69,8 +69,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "2037e8f3-82da-4ce2-8abd-74cfc82e7de1"
+        "projectId": "bb968308-4f79-4daf-87d7-4d9617367b13"
       }
-    }
+    },
+    "owner": "akzan0311zs-team"
   }
 }

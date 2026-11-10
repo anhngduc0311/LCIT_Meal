@@ -110,9 +110,9 @@ const findActiveHolidayEvent = (events, dateStr) =>
  * Nếu không truyền `month`, mặc định lấy tháng hiện tại theo giờ VN.
  *
  * @param {string=} targetMonth - "YYYY-MM", mặc định = tháng hiện tại
- * @param {{ fromDate?: string }} options - Giới hạn ngày bắt đầu khi tạo bù.
+ * @param {{ fromDate?: string, users?: object[] }} options - Giới hạn ngày và người được tạo bù.
  */
-async function runAutoSchedule(targetMonth, { fromDate } = {}) {
+async function runAutoSchedule(targetMonth, { fromDate, users: selectedUsers } = {}) {
   if (fromDate !== undefined) {
     const parsed = typeof fromDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(fromDate)
       ? new Date(`${fromDate}T00:00:00Z`) : null;
@@ -138,7 +138,7 @@ async function runAutoSchedule(targetMonth, { fromDate } = {}) {
     useMealScheduleConfig,
     enabledScheduleDays,
   ] = await Promise.all([
-    userRepository.list(),
+    selectedUsers ?? userRepository.list(),
     mealOptionRepository.list(),
     holidayEventRepository.list(),
     mealScheduleConfigRepository.getUseMealConfig().catch(() => true),
@@ -170,15 +170,26 @@ async function runAutoSchedule(targetMonth, { fromDate } = {}) {
     }
 
     const holidayEvent = findActiveHolidayEvent(holidayEvents, date);
+    // Tạo bù cho tài khoản mới không thay đổi lịch nghỉ của cả bếp.
+    if (selectedUsers && holidayEvent) {
+      skippedHolidayDates += 1;
+      continue;
+    }
 
     let meal = await mealRepository.getByDate(date);
     if (!meal) {
-      meal = await mealRepository.create({
-        mealDate: date,
-        note: holidayEvent ? `Nghỉ lịch: ${holidayEvent.name}` : null,
-        status: MEAL_STATUS.ACTIVE,
-      });
-      createdMeals += 1;
+      try {
+        meal = await mealRepository.create({
+          mealDate: date,
+          note: holidayEvent ? `Nghỉ lịch: ${holidayEvent.name}` : null,
+          status: MEAL_STATUS.ACTIVE,
+        });
+        createdMeals += 1;
+      } catch (error) {
+        if (error.code !== 'ER_DUP_ENTRY') throw error;
+        meal = await mealRepository.getByDate(date);
+        if (!meal) throw error;
+      }
     }
 
     // Ngày rơi vào 1 sự kiện hủy lịch đang active - tự động hủy bếp ăn
@@ -205,13 +216,18 @@ async function runAutoSchedule(targetMonth, { fromDate } = {}) {
         meal.id,
       );
       if (existing) continue;
-      await mealRegistrationRepository.create({
-        userId: user.id,
-        mealId: meal.id,
-        guestCount: 0,
-        status: MEAL_REGISTRATION_STATUS.CONFIRMED,
-      });
-      createdRegistrations += 1;
+      try {
+        await mealRegistrationRepository.create({
+          userId: user.id,
+          mealId: meal.id,
+          guestCount: 0,
+          status: MEAL_REGISTRATION_STATUS.CONFIRMED,
+        });
+        createdRegistrations += 1;
+      } catch (error) {
+        if (error.code !== 'ER_DUP_ENTRY') throw error;
+        if (!(await mealRegistrationRepository.getByUserAndMeal(user.id, meal.id))) throw error;
+      }
     }
   }
 
@@ -225,6 +241,24 @@ async function runAutoSchedule(targetMonth, { fromDate } = {}) {
     skippedHolidayDates,
     skippedNonScheduleDates,
   };
+}
+
+async function registerNewUsers(users, today = getVietnamDate()) {
+  const eligibleUsers = users.filter(user => user && canAutoRegister(user));
+  if (eligibleUsers.length === 0) return;
+
+  const month = today.slice(0, 7);
+  const tomorrow = new Date(`${today}T00:00:00Z`);
+  tomorrow.setUTCDate(tomorrow.getUTCDate() + 1);
+  const fromDate = tomorrow.toISOString().slice(0, 10);
+  if (fromDate.slice(0, 7) !== month) return;
+
+  try {
+    await runAutoSchedule(month, { fromDate, users: eligibleUsers });
+  } catch (error) {
+    // Tài khoản đã được lưu. Không báo tạo tài khoản thất bại nếu lỗi ở bước tạo suất.
+    console.error('[autoSchedule] Không thể tạo đủ suất cho tài khoản mới:', eligibleUsers.map(user => user.id), error);
+  }
 }
 
 // Chạy 20:00 hàng ngày (giờ server) để chuẩn bị bếp ăn + đăng ký cho ngày mai.
@@ -288,4 +322,4 @@ function start() {
   );
 }
 
-module.exports = { start, runAutoSchedule };
+module.exports = { start, runAutoSchedule, registerNewUsers };

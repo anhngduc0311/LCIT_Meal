@@ -16,7 +16,7 @@ function fixture() {
       getByUserAndMeal: async (userId, mealId) => mealId === '2026-11-05' ? { status: 'cancelled' } : null,
       create: async data => registrations.push(data),
     },
-    UserRepository: { list: async () => [{ id: 2 }] },
+    UserRepository: { list: async () => [{ id: 2, status: '1', roles: ['employee'] }] },
     SystemSettingRepository: { getByKey: async () => ({ typedValue: true }) },
     MealOptionRepository: { list: async () => [{ userId: 2, status: 'approved', type: 'cancel_schedule', fromDate: '2026-11-06', toDate: '2026-11-06' }] },
     HolidayEventRepository: { list: async () => [] },
@@ -27,7 +27,7 @@ function fixture() {
     require(id) {
       const name = path.basename(id);
       if (repositories[name]) return class { constructor() { Object.assign(this, repositories[name]); } };
-      if (id === './autoRegistrationEligibility') return { canAutoRegister: () => true };
+      if (id === './autoRegistrationEligibility') return require('../../src/jobs/autoRegistrationEligibility');
       if (name === 'MealRegistration') return { CONFIRMED: 'confirmed' };
       if (name === 'Meal') return { ACTIVE: 'active' };
       if (name === 'HolidayEvent') return { HOLIDAY_EVENT_STATUS: { ACTIVE: 'active' } };
@@ -36,7 +36,7 @@ function fixture() {
     },
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, '../../src/jobs/autoScheduleJob.js'), 'utf8'), sandbox);
-  return { run: sandbox.module.exports.runAutoSchedule, created, registrations };
+  return { run: sandbox.module.exports.runAutoSchedule, registerNewUsers: sandbox.module.exports.registerNewUsers, created, registrations };
 }
 
 test('Future backfill leaves historical days, weekends and existing cuts untouched', async () => {
@@ -53,4 +53,27 @@ test('Backfill rejects invalid dates before creating meals', async () => {
   const { run, created } = fixture();
   await assert.rejects(run('2026-11', { fromDate: '2026-02-30' }), /valid YYYY-MM-DD/);
   assert.equal(created.length, 0);
+});
+
+test('New accounts get meals from tomorrow through month end, without enrolling existing staff', async () => {
+  const { registerNewUsers, registrations } = fixture();
+  await registerNewUsers([
+    { id: 3, status: '1', roles: ['employee'] },
+    { id: 4, status: '1', roles: ['manager'] },
+    { id: 5, status: '0', roles: ['employee'] },
+    { id: 6, status: '1', roles: ['admin'] },
+  ], '2026-11-25');
+
+  assert.deepEqual(registrations.map(row => [row.mealId, row.userId]), [
+    ['2026-11-26', 3], ['2026-11-26', 4],
+    ['2026-11-27', 3], ['2026-11-27', 4],
+    ['2026-11-30', 3], ['2026-11-30', 4],
+  ]);
+});
+
+test('An account created on the last day is left to the next monthly run', async () => {
+  const { registerNewUsers, created, registrations } = fixture();
+  await registerNewUsers([{ id: 3, status: '1', roles: ['employee'] }], '2026-11-30');
+  assert.equal(created.length, 0);
+  assert.equal(registrations.length, 0);
 });
