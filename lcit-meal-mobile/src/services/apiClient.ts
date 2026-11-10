@@ -36,6 +36,12 @@ export interface RequestOptions extends RequestInit {
   skipAuth?: boolean;
 }
 
+export async function getApiBaseUrl(): Promise<string> {
+  const overriddenUrl = await storage.getItem(STORAGE_KEYS.API_URL_OVERRIDE);
+  const rawBaseUrl = (overriddenUrl || env.apiBaseUrl).trim().replace(/\/+$/, '');
+  return rawBaseUrl.endsWith('/api') ? rawBaseUrl : rawBaseUrl + '/api';
+}
+
 /**
  * Hàm gọi API backend bọc chuẩn ApiResponse
  */
@@ -46,9 +52,7 @@ export async function apiClient<T>(
   const { timeoutMs = env.requestTimeoutMs, skipAuth = false, ...customConfig } = options;
 
   // Lấy API URL (hỗ trợ cấu hình tùy biến khi chạy máy thật)
-  const overriddenUrl = await storage.getItem(STORAGE_KEYS.API_URL_OVERRIDE);
-  const rawBaseUrl = (overriddenUrl || env.apiBaseUrl).trim().replace(/\/+$/, '');
-  const baseUrl = rawBaseUrl.endsWith('/api') ? rawBaseUrl : `${rawBaseUrl}/api`;
+  const baseUrl = await getApiBaseUrl();
 
   const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
   const fullUrl = `${baseUrl}${cleanEndpoint}`;

@@ -16,6 +16,7 @@ export interface NotificationItem {
   title: string;
   content: string;
   url?: string | null;
+  imageUri?: string;
   type?: NotificationType;
   status?: string;
   createdAt: string;
@@ -35,6 +36,7 @@ export interface SendNotificationRequest {
   title: string;
   content: string;
   url?: string;
+  image?: { uri: string; name: string; mimeType: string; file?: File };
   type?: string;
   userIds?: number[]; // Nếu để trống/không gửi -> broadcast cho toàn bộ cán bộ active
 }

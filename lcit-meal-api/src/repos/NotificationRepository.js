@@ -15,14 +15,15 @@ class NotificationRepository {
                 updated_at,
                 updated_by
             FROM notification
+            WHERE status <> '0'
             ORDER BY id DESC
         `);
 
     return rows.map((row) => new Notification(row));
   }
 
-  async get(id) {
-    const [rows] = await pool.query(
+  async get(id, connection = pool) {
+    const [rows] = await connection.query(
       `
             SELECT
                 id,
@@ -85,6 +86,8 @@ class NotificationRepository {
             `;
 
       params.push(status);
+    } else {
+      sql += " AND status <> '0'";
     }
 
     sql += `
@@ -96,9 +99,9 @@ class NotificationRepository {
     return rows.map((row) => new Notification(row));
   }
 
-  async create(data) {
+  async create(data, connection = pool) {
     const status = data.status || "active"; // Default status to 'active' if not provided
-    const [result] = await pool.query(
+    const [result] = await connection.query(
       `
             INSERT INTO notification (
                 title,
@@ -112,7 +115,23 @@ class NotificationRepository {
       [data.title, data.content, data.url, status, data.createdBy],
     );
 
-    return this.get(result.insertId);
+    return this.get(result.insertId, connection);
+  }
+
+  async createWithRecipients(data, userIds) {
+    const connection = await pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      const notification = await this.create(data, connection);
+      await this.addRecipients(notification.id, userIds, connection);
+      await connection.commit();
+      return notification;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
   }
 
   async update(id, data) {
@@ -139,7 +158,7 @@ class NotificationRepository {
       `
             UPDATE notification
             SET
-                status = 0,
+                status = '0',
                 updated_by = ?,
                 updated_at = NOW()
             WHERE id = ?
@@ -153,7 +172,7 @@ class NotificationRepository {
   // ===== Bảng trung gian notification_recipient (User <-> Notification) =====
 
   // Gửi 1 notification đã tạo tới danh sách user (bulk insert)
-  async addRecipients(notificationId, userIds) {
+  async addRecipients(notificationId, userIds, connection = pool) {
     const uniqueUserIds = [...new Set(userIds)].filter(Boolean);
 
     if (uniqueUserIds.length === 0) {
@@ -162,7 +181,7 @@ class NotificationRepository {
 
     const values = uniqueUserIds.map((userId) => [userId, notificationId]);
 
-    const [result] = await pool.query(
+    const [result] = await connection.query(
       `
             INSERT INTO notification_recipient (user_id, notification_id)
             VALUES ?
@@ -207,6 +226,7 @@ class NotificationRepository {
             FROM notification_recipient nr
             INNER JOIN notification n ON n.id = nr.notification_id
             WHERE nr.user_id = ?
+              AND n.status <> '0'
         `;
 
     const params = [userId];
@@ -233,8 +253,9 @@ class NotificationRepository {
     const [rows] = await pool.query(
       `
             SELECT COUNT(*) AS total
-            FROM notification_recipient
-            WHERE user_id = ? AND is_seen = 0
+            FROM notification_recipient nr
+            INNER JOIN notification n ON n.id = nr.notification_id
+            WHERE nr.user_id = ? AND nr.is_seen = 0 AND n.status <> '0'
         `,
       [userId],
     );

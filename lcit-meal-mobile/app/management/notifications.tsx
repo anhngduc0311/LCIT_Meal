@@ -16,7 +16,10 @@ import {
   Modal,
   Alert,
   FlatList,
+  ScrollView,
 } from 'react-native';
+import { Image } from 'expo-image';
+import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
@@ -25,6 +28,7 @@ import { Card } from '../../src/components/common/Card';
 import { Badge } from '../../src/components/common/Badge';
 import { Button } from '../../src/components/common/Button';
 import { Input } from '../../src/components/common/Input';
+import { isNotificationImage, NotificationImage } from '../../src/components/common/NotificationImage';
 import { ConfirmDialog } from '../../src/components/common/ConfirmDialog';
 import { ForbiddenState } from '../../src/components/states/ForbiddenState';
 import { EmptyState } from '../../src/components/states/EmptyState';
@@ -50,7 +54,7 @@ export default function ManagementNotificationsScreen() {
   // Form states
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [url, setUrl] = useState('');
+  const [image, setImage] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [notifType, setNotifType] = useState<string>('SYSTEM');
   const [targetScope, setTargetScope] = useState<'broadcast' | 'custom'>('broadcast');
   const [selectedUserIds, setSelectedUserIds] = useState<number[]>([]);
@@ -81,6 +85,25 @@ export default function ManagementNotificationsScreen() {
     }
   };
 
+  const handlePickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 });
+      if (result.canceled) return;
+      const asset = result.assets[0];
+      if ((asset.fileSize ?? asset.file?.size ?? 0) > 5 * 1024 * 1024) {
+        Alert.alert('Ảnh quá lớn', 'Vui lòng chọn ảnh tối đa 5 MB.');
+        return;
+      }
+      if (asset.mimeType && !['image/jpeg', 'image/png', 'image/webp'].includes(asset.mimeType)) {
+        Alert.alert('Định dạng ảnh không hỗ trợ', 'Vui lòng chọn ảnh JPG, PNG hoặc WebP.');
+        return;
+      }
+      setImage(asset);
+    } catch {
+      Alert.alert('Không mở được thư viện ảnh', 'Vui lòng thử lại.');
+    }
+  };
+
   const handleOpenPreview = () => {
     if (!title.trim() || !content.trim()) {
       Alert.alert('Thiếu thông tin', 'Vui lòng nhập đầy đủ Tiêu đề và Nội dung thông báo.');
@@ -90,15 +113,26 @@ export default function ManagementNotificationsScreen() {
       Alert.alert('Chưa chọn người nhận', 'Vui lòng chọn ít nhất 1 cán bộ nhận thông báo.');
       return;
     }
+    sendMutation.reset();
     setIsPreviewOpen(true);
   };
 
+  const closePreview = () => {
+    if (!sendMutation.isPending) setIsPreviewOpen(false);
+  };
+
   const handleConfirmSend = async () => {
+    if (sendMutation.isPending) return;
     try {
       await sendMutation.mutateAsync({
         title: title.trim(),
         content: content.trim(),
-        url: url.trim() || undefined,
+        image: image ? {
+          uri: image.uri,
+          name: image.fileName || 'notification.jpg',
+          mimeType: image.mimeType || 'image/jpeg',
+          file: image.file,
+        } : undefined,
         type: notifType,
         userIds: targetScope === 'custom' ? selectedUserIds : undefined,
       });
@@ -106,21 +140,24 @@ export default function ManagementNotificationsScreen() {
       setIsPreviewOpen(false);
       setTitle('');
       setContent('');
-      setUrl('');
+      setImage(null);
       setSelectedUserIds([]);
       setTargetScope('broadcast');
       setActiveTab('history');
       Alert.alert('Thành công', 'Thông báo đã được phát thành công.');
-    } catch (err: unknown) {
-      const error = err as Error;
-      Alert.alert('Lỗi phát thông báo', error.message || 'Thao tác thất bại');
+    } catch {
+      // Hiển thị lỗi ngay trong hộp thoại, giữ nội dung để có thể gửi lại.
     }
   };
 
   const handleDeleteNotification = async () => {
-    if (!deleteTargetId) return;
-    await deleteMutation.mutateAsync(deleteTargetId);
-    setDeleteTargetId(null);
+    if (deleteTargetId === null || deleteMutation.isPending) return;
+    try {
+      await deleteMutation.mutateAsync(deleteTargetId);
+      setDeleteTargetId(null);
+    } catch {
+      // Giữ hộp thoại mở để hiển thị lỗi và cho phép thử lại.
+    }
   };
 
   const renderHistoryItem = useCallback(
@@ -140,7 +177,10 @@ export default function ManagementNotificationsScreen() {
           {role === 'admin' && (
             <TouchableOpacity
               style={styles.deleteHistoryBtn}
-              onPress={() => setDeleteTargetId(n.id)}
+              onPress={() => {
+                deleteMutation.reset();
+                setDeleteTargetId(n.id);
+              }}
               activeOpacity={0.7}
             >
               <Ionicons name="trash-outline" size={16} color="#DC2626" />
@@ -149,10 +189,11 @@ export default function ManagementNotificationsScreen() {
         </View>
 
         <Text style={styles.historyContent}>{n.content}</Text>
-        {Boolean(n.url) && <Text style={styles.historyUrl}>Liên kết: {n.url}</Text>}
+        <NotificationImage notification={n} />
+        {Boolean(n.url) && !isNotificationImage(n.url) && <Text style={styles.historyUrl}>Liên kết: {n.url}</Text>}
       </Card>
     ),
-    [role]
+    [deleteMutation, role]
   );
 
   if (!hasAccess) {
@@ -275,13 +316,20 @@ export default function ManagementNotificationsScreen() {
                     ))}
                   </View>
 
-                  <Input
-                    label="Đường dẫn liên kết (tùy chọn)"
-                    value={url}
-                    onChangeText={setUrl}
-                    placeholder="VD: /(tabs)/payments hoặc /(tabs)/schedule"
-                    leftIcon={<Ionicons name="link-outline" size={16} color={colors.textMuted} />}
+                  <Text style={styles.attachmentLabel}>Ảnh đính kèm (tùy chọn)</Text>
+                  <Button
+                    title={image ? 'Đổi ảnh' : 'Chọn ảnh'}
+                    variant="outline"
+                    onPress={handlePickImage}
+                    leftIcon={<Ionicons name="image-outline" size={18} color={colors.primary} />}
                   />
+                  {image && (
+                    <>
+                      <Image source={image.uri} contentFit="contain" style={styles.attachmentImage}
+                        accessibilityLabel="Ảnh đã chọn" />
+                      <Button title="Gỡ ảnh" variant="ghost" size="sm" onPress={() => setImage(null)} />
+                    </>
+                  )}
                 </Card>
 
                 {/* Phạm vi đối tượng */}
@@ -404,22 +452,24 @@ export default function ManagementNotificationsScreen() {
       )}
 
       {/* Modal Xem Trước Trước Khi Gửi (Review & Preview Modal) */}
-      <Modal visible={isPreviewOpen} transparent animationType="slide" onRequestClose={() => setIsPreviewOpen(false)}>
+      <Modal visible={isPreviewOpen} transparent animationType="slide" onRequestClose={closePreview}>
         <ModalBackdrop style={styles.modalOverlay}>
           <ModalCard style={styles.modalDialog}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalDialogTitle}>Xem lại thông báo trước khi phát</Text>
-              <TouchableOpacity onPress={() => setIsPreviewOpen(false)} activeOpacity={0.7}>
+              <TouchableOpacity onPress={closePreview} disabled={sendMutation.isPending} activeOpacity={0.7}>
                 <Ionicons name="close" size={22} color={colors.textSecondary} />
               </TouchableOpacity>
             </View>
 
-            <View style={styles.previewBox}>
+            <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewBox}>
               <Text style={styles.previewLabel}>Tiêu đề:</Text>
               <Text style={styles.previewTitleText}>{title}</Text>
 
               <Text style={[styles.previewLabel, { marginTop: spacing.sm }]}>Nội dung:</Text>
               <Text style={styles.previewContentText}>{content}</Text>
+              {image && <Image source={image.uri} contentFit="contain" style={styles.attachmentImage}
+                accessibilityLabel="Ảnh đính kèm sẽ được gửi" />}
 
               <Text style={[styles.previewLabel, { marginTop: spacing.sm }]}>Đối tượng nhận:</Text>
               <View style={styles.targetSummaryRow}>
@@ -432,13 +482,19 @@ export default function ManagementNotificationsScreen() {
                   variant={targetScope === 'broadcast' ? 'confirmed' : 'warning'}
                 />
               </View>
-            </View>
+            </ScrollView>
 
+            {sendMutation.error && (
+              <Text accessibilityRole="alert" style={styles.sendError}>
+                {sendMutation.error.message || 'Không gửi được thông báo. Vui lòng thử lại.'}
+              </Text>
+            )}
             <View style={styles.modalActionRow}>
               <Button
                 title="Chỉnh sửa lại"
                 variant="secondary"
-                onPress={() => setIsPreviewOpen(false)}
+                onPress={closePreview}
+                disabled={sendMutation.isPending}
                 style={styles.modalBtnHalf}
               />
               <Button
@@ -462,13 +518,34 @@ export default function ManagementNotificationsScreen() {
         cancelText="Hủy"
         variant="danger"
         onConfirm={handleDeleteNotification}
-        onCancel={() => setDeleteTargetId(null)}
-      />
+        loading={deleteMutation.isPending}
+        onCancel={() => {
+          if (!deleteMutation.isPending) setDeleteTargetId(null);
+        }}
+      >
+        {deleteMutation.error && (
+          <Text accessibilityRole="alert" style={{ color: colors.danger }}>
+            {deleteMutation.error.message || 'Không xóa được thông báo. Vui lòng thử lại.'}
+          </Text>
+        )}
+      </ConfirmDialog>
     </ScreenContainer>
   );
 }
 
 const styles = StyleSheet.create({
+  attachmentLabel: {
+    color: colors.text,
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    marginBottom: spacing.xs,
+  },
+  attachmentImage: {
+    width: '100%',
+    height: 140,
+    marginTop: spacing.sm,
+    borderRadius: radius.md,
+  },
   scrollContent: {
     padding: spacing.md,
     paddingBottom: spacing['3xl'],
@@ -698,6 +775,7 @@ const styles = StyleSheet.create({
   },
   modalDialog: {
     width: '100%',
+    maxHeight: '100%',
     backgroundColor: colors.surface,
     borderRadius: radius.xl,
     padding: spacing.lg,
@@ -716,11 +794,18 @@ const styles = StyleSheet.create({
     fontWeight: typography.weights.bold,
     color: colors.text,
   },
-  previewBox: {
+  previewScroll: {
+    flexGrow: 0,
     backgroundColor: colors.backgroundDark,
     borderRadius: radius.lg,
-    padding: spacing.md,
     marginBottom: spacing.md,
+  },
+  previewBox: {
+    padding: spacing.md,
+  },
+  sendError: {
+    color: colors.danger,
+    marginBottom: spacing.sm,
   },
   previewLabel: {
     fontSize: 10,

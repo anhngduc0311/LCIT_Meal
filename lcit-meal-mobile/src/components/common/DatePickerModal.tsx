@@ -20,6 +20,7 @@ import { ModalCard } from './ModalCard';
 import {
   formatBusinessDate,
   formatDisplayDate,
+  parseDateParts,
 } from '../../utils/formatters';
 import { colors } from '../../theme/colors';
 import { spacing } from '../../theme/spacing';
@@ -71,12 +72,12 @@ export const DatePickerModal: React.FC<DatePickerModalProps> = ({
 
   // Current view month & year
   const initialBaseDate = initialDate || initialFromDate || todayStr;
-  const parsedBase = new Date(initialBaseDate);
+  const parsedBase = parseDateParts(initialBaseDate);
   const [viewYear, setViewYear] = useState<number>(
-    isNaN(parsedBase.getFullYear()) ? new Date().getFullYear() : parsedBase.getFullYear()
+    parsedBase?.year ?? new Date().getFullYear()
   );
   const [viewMonth, setViewMonth] = useState<number>(
-    isNaN(parsedBase.getMonth()) ? new Date().getMonth() : parsedBase.getMonth()
+    parsedBase ? parsedBase.month - 1 : new Date().getMonth()
   ); // 0-indexed (0 = Jan)
 
   // Navigate months

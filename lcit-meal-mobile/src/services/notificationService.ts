@@ -74,9 +74,17 @@ export const notificationService = {
       await new Promise((res) => setTimeout(res, 400));
       return mockStore.sendNotification(data);
     }
+    const { image, ...payload } = data;
+    if (image) {
+      const body = new FormData();
+      body.append('payload', JSON.stringify(payload));
+      const file = image.file ?? ({ uri: image.uri, name: image.name, type: image.mimeType } as unknown as Blob);
+      body.append('image', file);
+      return apiClient<NotificationItem>('/notifications/send', { method: 'POST', body });
+    }
     return await apiClient<NotificationItem>('/notifications/send', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify(payload),
     });
   },
 

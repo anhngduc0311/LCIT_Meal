@@ -53,6 +53,8 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
       {Boolean(label) && <Text style={styles.label}>{label}</Text>}
 
       <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={[label || placeholder, displayValue].filter(Boolean).join(', ')}
         activeOpacity={0.7}
         disabled={disabled}
         onPress={() => setModalVisible(true)}
@@ -89,8 +91,8 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
 
       {Boolean(error) && <Text style={styles.errorText}>{error}</Text>}
 
-      <DatePickerModal
-        visible={modalVisible}
+      {modalVisible && <DatePickerModal
+        visible
         mode="single"
         initialDate={value}
         minDate={minDate}
@@ -101,7 +103,7 @@ export const DatePickerInput: React.FC<DatePickerInputProps> = ({
           setModalVisible(false);
         }}
         onClose={() => setModalVisible(false)}
-      />
+      />}
     </View>
   );
 };

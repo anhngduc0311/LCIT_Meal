@@ -17,7 +17,7 @@ class NotificationService {
   async get(id) {
     const notification = await this.notificationRepository.get(id);
 
-    if (!notification) {
+    if (!notification || String(notification.status) === "0") {
       throw new AppError("Notification không tồn tại", 404);
     }
 
@@ -61,7 +61,9 @@ class NotificationService {
   }
 
   async delete(id, updatedBy) {
-    await this.get(id);
+    if (!(await this.notificationRepository.get(id))) {
+      throw new AppError("Notification không tồn tại", 404);
+    }
 
     return this.notificationRepository.delete(id, updatedBy);
   }
@@ -73,28 +75,30 @@ class NotificationService {
   async createForUsers(data, userIds) {
     this.validateCreateData(data);
 
-    const notification = await this.notificationRepository.create({
-      title: data.title,
-      content: data.content,
-      url: data.url || null,
-      status: data.status || NOTIFICATION_STATUS.ACTIVE,
-      createdBy: data.createdBy || null,
-    });
-
     let recipientIds = userIds;
 
     if ((!recipientIds || recipientIds.length === 0) && this.userRepository) {
       recipientIds = await this.userRepository.getAllActiveIds();
     }
 
-    if (recipientIds && recipientIds.length > 0) {
-      await this.notificationRepository.addRecipients(
-        notification.id,
-        recipientIds,
-      );
-    }
+    return this.notificationRepository.createWithRecipients({
+      title: data.title,
+      content: data.content,
+      url: data.url || null,
+      status: data.status || NOTIFICATION_STATUS.ACTIVE,
+      createdBy: data.createdBy || null,
+    }, recipientIds || []);
+  }
 
-    return notification;
+  async getImageUrl(id, userId, canManage) {
+    const notification = await this.get(id);
+    if (!canManage) {
+      const recipients = await this.notificationRepository.getRecipientUserIds(id);
+      if (!recipients.some(recipient => String(recipient) === String(userId))) {
+        throw new AppError("Không tìm thấy ảnh đính kèm", 404);
+      }
+    }
+    return notification.url;
   }
 
   // Gửi thông báo cho toàn bộ user thuộc 1 (hoặc nhiều) role - vd: báo cho

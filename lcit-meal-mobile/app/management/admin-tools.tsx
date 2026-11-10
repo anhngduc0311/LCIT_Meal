@@ -11,6 +11,7 @@ import {
   StyleSheet,
   ScrollView,
   Alert,
+  Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -18,12 +19,15 @@ import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Header } from '../../src/components/common/Header';
 import { Card } from '../../src/components/common/Card';
 import { Button } from '../../src/components/common/Button';
-import { Input } from '../../src/components/common/Input';
+import { DatePickerInput } from '../../src/components/common/DatePickerInput';
+import { ModalBackdrop } from '../../src/components/common/ModalBackdrop';
+import { ModalCard } from '../../src/components/common/ModalCard';
 import { ConfirmDialog } from '../../src/components/common/ConfirmDialog';
 import { ForbiddenState } from '../../src/components/states/ForbiddenState';
 import { useAuth } from '../../src/providers/AuthProvider';
 import { adminToolsService } from '../../src/services/adminToolsService';
-import { formatBusinessDate, formatBusinessDateDisplay } from '../../src/utils/formatters';
+import { formatBusinessDateDisplay } from '../../src/utils/formatters';
+import { vietnamToday } from '../../src/utils/cancellationDeadline';
 import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
@@ -36,17 +40,16 @@ export default function ManagementAdminToolsScreen() {
   const isAdmin = role === 'admin';
   const hasAccess = role === 'admin' || role === 'manager';
 
-  // Form states - tính chuẩn theo múi giờ Việt Nam / Local, không dùng toISOString() gây lùi ngày/tháng
-  const now = new Date();
-  const currentYear = now.getFullYear();
-  const currentMonthNum = now.getMonth() + 1;
-  const currentMonthStr = `${currentYear}-${String(currentMonthNum).padStart(2, '0')}`;
+  const today = vietnamToday();
+  const [currentYear, currentMonthNum] = today.split('-').map(Number);
+  const currentMonthStr = today.slice(0, 7);
   const nextMonthNum = currentMonthNum === 12 ? 1 : currentMonthNum + 1;
   const nextMonthYear = currentMonthNum === 12 ? currentYear + 1 : currentYear;
   const nextMonthStr = `${nextMonthYear}-${String(nextMonthNum).padStart(2, '0')}`;
 
   const [selectedMonth, setSelectedMonth] = useState(currentMonthStr);
-  const [selectedDate, setSelectedDate] = useState(formatBusinessDate(now));
+  const [selectedDate, setSelectedDate] = useState(today);
+  const [pickerYear, setPickerYear] = useState<number | null>(null);
 
   // Running states
   const [isRunningSchedule, setIsRunningSchedule] = useState(false);
@@ -141,6 +144,8 @@ export default function ManagementAdminToolsScreen() {
             {[currentMonthStr, nextMonthStr].map((m) => (
               <TouchableOpacity
                 key={`month-chip-${m}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: selectedMonth === m }}
                 style={[styles.monthChip, selectedMonth === m && styles.monthChipActive]}
                 onPress={() => setSelectedMonth(m)}
                 activeOpacity={0.7}
@@ -151,18 +156,22 @@ export default function ManagementAdminToolsScreen() {
                     selectedMonth === m && styles.monthChipTextActive,
                   ]}
                 >
-                  Tháng {m}
+                  Tháng {m.slice(5)}/{m.slice(0, 4)}
                 </Text>
               </TouchableOpacity>
             ))}
           </View>
 
-          <Input
-            label="Hoặc nhập tháng tùy ý (YYYY-MM)"
-            value={selectedMonth}
-            onChangeText={setSelectedMonth}
-            placeholder="2026-10"
-          />
+          <TouchableOpacity
+            accessibilityRole="button"
+            accessibilityLabel={`Chọn tháng khác, đang chọn tháng ${selectedMonth}`}
+            onPress={() => setPickerYear(Number(selectedMonth.slice(0, 4)))}
+            style={styles.monthPickerField}
+          >
+            <Ionicons name="calendar-outline" size={18} color={colors.primary} />
+            <Text style={styles.monthPickerValue}>Tháng {selectedMonth.slice(5)}/{selectedMonth.slice(0, 4)}</Text>
+            <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+          </TouchableOpacity>
 
           <Button
             title="Kích hoạt sinh lịch ăn"
@@ -195,11 +204,10 @@ export default function ManagementAdminToolsScreen() {
               khi bữa trưa kết thúc để phục vụ tính phí và thống kê báo cáo.
             </Text>
 
-            <Input
-              label="Ngày cần chốt suất ăn (YYYY-MM-DD)"
+            <DatePickerInput
+              label="Ngày cần chốt suất ăn"
               value={selectedDate}
-              onChangeText={setSelectedDate}
-              placeholder="VD: 2026-09-25"
+              onChangeDate={setSelectedDate}
             />
 
             <Button
@@ -213,6 +221,52 @@ export default function ManagementAdminToolsScreen() {
           </Card>
         )}
       </ScrollView>
+
+      {pickerYear !== null && (
+        <Modal visible transparent animationType="fade" onRequestClose={() => setPickerYear(null)}>
+          <ModalBackdrop style={styles.pickerBackdrop}>
+            <ModalCard style={styles.pickerCard}>
+              <View style={styles.pickerHeader}>
+                <Text style={styles.toolTitle}>Chọn tháng tạo lịch</Text>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Đóng"
+                  onPress={() => setPickerYear(null)} style={styles.pickerControl}>
+                  <Ionicons name="close" size={22} color={colors.textSecondary} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.pickerHeader}>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Năm trước"
+                  onPress={() => setPickerYear(pickerYear - 1)} style={styles.pickerControl}>
+                  <Ionicons name="chevron-back" size={20} color={colors.primary} />
+                </TouchableOpacity>
+                <Text style={styles.monthPickerValue}>{pickerYear}</Text>
+                <TouchableOpacity accessibilityRole="button" accessibilityLabel="Năm sau"
+                  onPress={() => setPickerYear(pickerYear + 1)} style={styles.pickerControl}>
+                  <Ionicons name="chevron-forward" size={20} color={colors.primary} />
+                </TouchableOpacity>
+              </View>
+              <View style={styles.monthGrid}>
+                {Array.from({ length: 12 }, (_, index) => {
+                  const month = index + 1;
+                  const value = `${pickerYear}-${String(month).padStart(2, '0')}`;
+                  const selected = value === selectedMonth;
+                  return (
+                    <TouchableOpacity key={month} accessibilityRole="button"
+                      accessibilityState={{ selected }}
+                      style={[styles.monthTile, selected && styles.monthChipActive]}
+                      onPress={() => {
+                        setSelectedMonth(value);
+                        setPickerYear(null);
+                      }}
+                    >
+                      <Text style={[styles.monthChipText, selected && styles.monthChipTextActive]}>Tháng {month}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </ModalCard>
+          </ModalBackdrop>
+        </Modal>
+      )}
 
       {/* Confirm Schedule Dialog */}
       <ConfirmDialog
@@ -298,6 +352,62 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.xs,
     marginBottom: spacing.xs,
+  },
+  monthPickerField: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  monthPickerValue: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    textAlign: 'center',
+  },
+  pickerBackdrop: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: spacing.md,
+    backgroundColor: colors.overlay,
+  },
+  pickerCard: {
+    width: '100%',
+    maxWidth: 380,
+    padding: spacing.md,
+    borderRadius: radius.xl,
+    backgroundColor: colors.surface,
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  pickerControl: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  monthGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    rowGap: spacing.xs,
+  },
+  monthTile: {
+    width: '32%',
+    minHeight: 44,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: radius.md,
+    backgroundColor: colors.backgroundDark,
   },
   monthChip: {
     flex: 1,

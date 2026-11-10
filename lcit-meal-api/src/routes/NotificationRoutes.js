@@ -1,6 +1,13 @@
 const express = require("express");
+const multer = require("multer");
 
 const ROLE = require("../constants/Role");
+const AppError = require("../ultis/AppError");
+
+const receiveImage = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024, fields: 1 },
+}).single("image");
 
 // Xem thông báo: mọi nhân sự nghiệp vụ, trừ bếp (bếp chỉ xem dashboard).
 // Tạo/sửa/xóa thông báo: chỉ admin + manager (người phát thông báo).
@@ -37,6 +44,7 @@ const notificationRoutes = (notificationController, authMiddleware, authorize) =
 
   // GET /api/notifications/:id
   router.get("/:id", authorize(...ROLE.STAFF_ROLES), notificationController.get);
+  router.get("/:id/image", authorize(...ROLE.STAFF_ROLES), notificationController.getImage);
 
   // PATCH /api/notifications/:id/seen
   router.patch("/:id/seen", authorize(...ROLE.STAFF_ROLES), notificationController.markSeen);
@@ -52,6 +60,12 @@ const notificationRoutes = (notificationController, authMiddleware, authorize) =
   router.post(
     "/send",
     authorize(ROLE.ADMIN, ROLE.MANAGER),
+    (req, res, next) => receiveImage(req, res, (error) => {
+      if (error instanceof multer.MulterError) {
+        return next(new AppError("Ảnh đính kèm không hợp lệ hoặc vượt quá 5 MB", 400));
+      }
+      next(error);
+    }),
     notificationController.send,
   );
 

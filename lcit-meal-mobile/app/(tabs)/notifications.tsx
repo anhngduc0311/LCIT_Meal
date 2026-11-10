@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { Header } from '../../src/components/common/Header';
 import { Card } from '../../src/components/common/Card';
+import { NotificationImage } from '../../src/components/common/NotificationImage';
 import { EmptyState } from '../../src/components/states/EmptyState';
 import {
   useMyNotifications,
@@ -103,6 +104,7 @@ export default function NotificationsScreen() {
               </View>
 
               <Text style={styles.notifBody}>{item.content}</Text>
+              <NotificationImage notification={item} />
               <Text style={styles.notifTime}>{formatDateTime(item.createdAt)}</Text>
             </View>
           </View>

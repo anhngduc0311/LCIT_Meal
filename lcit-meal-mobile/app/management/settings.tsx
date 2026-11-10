@@ -24,6 +24,7 @@ import { Header } from '../../src/components/common/Header';
 import { Card } from '../../src/components/common/Card';
 import { Button } from '../../src/components/common/Button';
 import { Input } from '../../src/components/common/Input';
+import { ConfirmDialog } from '../../src/components/common/ConfirmDialog';
 import { ForbiddenState } from '../../src/components/states/ForbiddenState';
 import { useAuth } from '../../src/providers/AuthProvider';
 import {
@@ -49,6 +50,83 @@ const DAY_NAMES = [
   'Thứ 6',
   'Thứ 7',
 ];
+
+function TimePicker({ label, value, onChange }: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const parts = (draft ?? value).split(':');
+
+  function adjust(index: number, limit: number, delta: number) {
+    setDraft(current => {
+      if (current === null) return null;
+      const next = current.split(':');
+      const number = (Number(next[index]) + delta + limit) % limit;
+      next[index] = String(number).padStart(2, '0');
+      return next.join(':');
+    });
+  }
+
+  return (
+    <View>
+      <Text style={styles.timeLabel}>{label}</Text>
+      <TouchableOpacity
+        accessibilityRole="button"
+        accessibilityLabel={`${label}, ${value}. Mở bộ chọn giờ`}
+        onPress={() => setDraft(value)}
+        style={styles.timeField}
+      >
+        <Ionicons name="time-outline" size={18} color={colors.primary} />
+        <Text style={styles.timeFieldValue}>{value}</Text>
+        <Ionicons name="chevron-down" size={16} color={colors.textSecondary} />
+      </TouchableOpacity>
+      {draft !== null && (
+        <ConfirmDialog
+          visible
+          title={label}
+          confirmText="Áp dụng"
+          cancelText="Hủy"
+          onConfirm={() => {
+            onChange(draft);
+            setDraft(null);
+          }}
+          onCancel={() => setDraft(null)}
+        >
+          <View style={styles.timePicker}>
+            {[{ name: 'giờ', limit: 24 }, { name: 'phút', limit: 60 }].map(({ name, limit }, index) => (
+              <View key={name} style={styles.timeColumn}>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`${label}, tăng ${name}`}
+                  onPress={() => adjust(index, limit, 1)}
+                  style={styles.timeArrow}
+                >
+                  <Ionicons name="chevron-up" size={20} color={colors.primary} />
+                </TouchableOpacity>
+                <Text accessibilityLabel={`${label}, ${parts[index]} ${name}`} style={styles.timeNumber}>
+                  {parts[index]}
+                </Text>
+                <TouchableOpacity
+                  accessibilityRole="button"
+                  accessibilityLabel={`${label}, giảm ${name}`}
+                  onPress={() => adjust(index, limit, -1)}
+                  style={styles.timeArrow}
+                >
+                  <Ionicons name="chevron-down" size={20} color={colors.primary} />
+                </TouchableOpacity>
+                <Text style={styles.timeUnit}>{name}</Text>
+              </View>
+            ))}
+          </View>
+        </ConfirmDialog>
+      )}
+    </View>
+  );
+}
+
+const TIME_VALUE = /^(?:[01]\d|2[0-3]):[0-5]\d(?::[0-5]\d)?$/;
 
 export default function ManagementSettingsScreen() {
   const router = useRouter();
@@ -102,10 +180,10 @@ export default function ManagementSettingsScreen() {
         if (gp) setGuestPrice(gp.settingValue);
 
         const ct = rawSettings.find((s) => s.settingKey === 'registration_close_time');
-        if (ct) setCloseTime(ct.settingValue);
+        if (ct) setCloseTime(TIME_VALUE.test(ct.settingValue) ? ct.settingValue.slice(0, 5) : '08:00');
 
         const comp = rawSettings.find((s) => s.settingKey === 'meal_completion_time');
-        if (comp) setCompletionTime(comp.settingValue);
+        if (comp) setCompletionTime(TIME_VALUE.test(comp.settingValue) ? comp.settingValue.slice(0, 5) : '12:00');
 
         const qr = rawSettings.find((s) => s.settingKey === 'payment_qr_image');
         if (qr) setPaymentQrUrl(qr.settingValue);
@@ -343,19 +421,17 @@ export default function ManagementSettingsScreen() {
 
             <View style={styles.rowInputs}>
               <View style={styles.halfCol}>
-                <Input
-                  label="Giờ đóng báo suất (HH:mm)"
+                <TimePicker
+                  label="Giờ đóng báo suất"
                   value={closeTime}
-                  onChangeText={setCloseTime}
-                  placeholder="08:00"
+                  onChange={setCloseTime}
                 />
               </View>
               <View style={styles.halfCol}>
-                <Input
-                  label="Giờ chốt hoàn thành (HH:mm)"
+                <TimePicker
+                  label="Giờ chốt hoàn thành"
                   value={completionTime}
-                  onChangeText={setCompletionTime}
-                  placeholder="12:00"
+                  onChange={setCompletionTime}
                 />
               </View>
             </View>
@@ -489,6 +565,57 @@ const styles = StyleSheet.create({
   halfCol: {
     minWidth: 180,
     flex: 1,
+  },
+  timeLabel: {
+    fontSize: typography.sizes.sm,
+    fontWeight: typography.weights.semibold,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  timeField: {
+    minHeight: 48,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+  },
+  timeFieldValue: {
+    flex: 1,
+    fontSize: typography.sizes.sm,
+    color: colors.text,
+    fontVariant: ['tabular-nums'],
+  },
+  timePicker: {
+    flexDirection: 'row',
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+    paddingBottom: spacing.xs,
+  },
+  timeColumn: {
+    flex: 1,
+    alignItems: 'center',
+  },
+  timeArrow: {
+    alignSelf: 'stretch',
+    minHeight: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  timeNumber: {
+    color: colors.text,
+    fontSize: typography.sizes.xl,
+    fontWeight: typography.weights.semibold,
+    fontVariant: ['tabular-nums'],
+  },
+  timeUnit: {
+    color: colors.textSecondary,
+    fontSize: typography.sizes.xs,
   },
   qrActionSection: {
     marginVertical: spacing.sm,

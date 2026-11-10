@@ -685,6 +685,7 @@ class MockStore {
       title: data.title,
       content: data.content,
       url: data.url || null,
+      imageUri: data.image?.uri,
       type: data.type || 'SYSTEM',
       status: 'active',
       createdAt: new Date().toISOString(),
