@@ -11,6 +11,7 @@ const paymentRoutes = (paymentController, authMiddleware, authorize) => {
 
   router.use(authMiddleware);
   router.get('/monthly-board', authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN), paymentController.monthlyBoard);
+  router.post('/monthly-board/export', authorize(ROLE.ADMIN, ROLE.MANAGER, ROLE.KITCHEN), paymentController.exportMonthlyBoard);
 
   // GET /api/payments
   router.get(

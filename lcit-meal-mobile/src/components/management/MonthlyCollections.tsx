@@ -4,10 +4,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { useQuery } from '@tanstack/react-query';
 import { useAuth } from '../../providers/AuthProvider';
 import { paymentService } from '../../services/paymentService';
+import { exportService } from '../../services/exportService';
 import { buildMonthlyCollections } from '../../utils/monthlyCollections';
 import { monthRange, shiftMonth } from '../../utils/monthlyMeals';
 import { formatBusinessDate, formatCurrency, formatDisplayDate } from '../../utils/formatters';
 import { Card } from '../common/Card';
+import { Button } from '../common/Button';
 import { Input } from '../common/Input';
 import { ErrorState } from '../states/ErrorState';
 import { EmptyState } from '../states/EmptyState';
@@ -21,6 +23,8 @@ export function MonthlyCollections({ header }: {
 }) {
   const [month, setMonth] = useState(() => formatBusinessDate(new Date()).slice(0, 7));
   const [search, setSearch] = useState('');
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState('');
   const facilities = useFacilities();
   const { today } = useCancellationDeadline();
   const range = monthRange(month);
@@ -39,6 +43,19 @@ export function MonthlyCollections({ header }: {
   const normalize = (text: string) => text.normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/gi, 'd').toLowerCase();
   const rows = summary?.rows.filter(row => normalize(`${row.name} ${row.username}`).includes(normalize(search.trim().replace(/^@/, '')))) || [];
   const refresh = async () => { await board.refetch(); };
+  const exportMonthlyBoard = async () => {
+    if (!summary || exporting || isMockMode) return;
+    setExporting(true);
+    setExportError('');
+    try {
+      const result = await exportService.exportMonthlyCollections(month, today < range.to ? today : range.to, summary);
+      if (!result.success) setExportError(result.message || 'Không thể xuất Excel.');
+    } catch {
+      setExportError('Không thể xuất Excel. Vui lòng thử lại.');
+    } finally {
+      setExporting(false);
+    }
+  };
   return <FlatList
     data={rows} keyExtractor={item => String(item.userId)}
     contentContainerStyle={styles.content} onRefresh={() => { void refresh(); }} refreshing={board.isRefetching}
@@ -71,6 +88,15 @@ export function MonthlyCollections({ header }: {
           <Text style={styles.hint}>Theo dõi riêng, không cộng vào khoản thu của từng cán bộ.</Text>
         </Card>
         <Text style={styles.hint}>Đơn giá: {formatCurrency(price)}/cán bộ · {formatCurrency(guestPrice)}/khách</Text>
+        {!isMockMode && <Button
+          title="Xuất Excel"
+          variant="outline"
+          size="sm"
+          loading={exporting}
+          leftIcon={<Ionicons name="download-outline" size={17} color={colors.primary} />}
+          onPress={exportMonthlyBoard}
+        />}
+        {exportError ? <Text accessibilityRole="alert" style={styles.error}>{exportError}</Text> : null}
         <Input placeholder="Tìm tên hoặc @tài khoản..." value={search} onChangeText={setSearch} />
         <Text style={styles.title}>Cần thu đến hiện tại · {rows.length} người</Text>
       </>}
@@ -96,6 +122,7 @@ const styles = StyleSheet.create({
   monthRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   monthButton: { padding: 12 }, title: { fontSize: 15, fontWeight: '700', color: colors.text },
   hint: { color: colors.textSecondary, fontSize: 12, lineHeight: 18 },
+  error: { color: colors.danger, fontSize: 12 },
   line: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 10, flexWrap: 'wrap' },
   label: { color: colors.textSecondary, fontSize: 13 }, value: { color: colors.text, fontSize: 14, fontWeight: '600' },
   guestValue: { color: colors.warning, fontSize: 14, fontWeight: '700' },

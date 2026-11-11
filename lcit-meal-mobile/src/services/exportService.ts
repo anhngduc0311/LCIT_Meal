@@ -6,11 +6,15 @@
 
 import { Platform } from 'react-native';
 import * as FileSystem from 'expo-file-system/legacy';
+import { File, Paths } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { env } from '../config/env';
 import { STORAGE_KEYS } from '../config/constants';
 import { storage } from '../utils/storage';
 import { MealRegistrationFilterParams, PaymentFilterParams } from '../types';
+import type { buildMonthlyCollections } from '../utils/monthlyCollections';
+
+const XLSX_MIME = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
 export interface ExportResult {
   success: boolean;
@@ -19,6 +23,16 @@ export interface ExportResult {
 }
 
 export const exportService = {
+  async exportMonthlyCollections(month: string, throughDate: string, summary: ReturnType<typeof buildMonthlyCollections>): Promise<ExportResult> {
+    const rows = summary.rows.map(({ name, username, staff, staffAmount, guests, guestAmount,
+      adjustmentAmount, paidAmount, remainingAmount, creditAmount }) => ({
+      name, username, staff, staffAmount, guests, guestAmount, adjustmentAmount, paidAmount, remainingAmount, creditAmount,
+    }));
+    const guestCount = summary.standalone.reduce((sum, guest) => sum + guest.count, 0);
+    const body = JSON.stringify({ month, throughDate, rows, guestCount, guestAmount: summary.standaloneGuestAmount });
+    return this.downloadAndShareFile('/payments/monthly-board/export', `thu-tien-an_co-so-1_${month}.xlsx`, body);
+  },
+
   /**
    * Tải và mở báo cáo Excel danh sách đăng ký suất ăn: GET /api/meal-registrations/export
    */
@@ -77,7 +91,7 @@ export const exportService = {
   /**
    * Tải file nhị phân qua fetch kèm header Authorization và lưu/chia sẻ
    */
-  async downloadAndShareFile(endpoint: string, filename: string): Promise<ExportResult> {
+  async downloadAndShareFile(endpoint: string, filename: string, body?: string): Promise<ExportResult> {
     const overriddenUrl = await storage.getItem(STORAGE_KEYS.API_URL_OVERRIDE);
     const rawBaseUrl = (overriddenUrl || env.apiBaseUrl).trim().replace(/\/+$/, '');
     const baseUrl = rawBaseUrl.endsWith('/api') ? rawBaseUrl : `${rawBaseUrl}/api`;
@@ -86,41 +100,55 @@ export const exportService = {
 
     const token = await storage.getItem(STORAGE_KEYS.AUTH_TOKEN);
     const headers: Record<string, string> = {
-      Accept: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/octet-stream, */*',
+      Accept: XLSX_MIME,
     };
     if (token) {
       headers['Authorization'] = `Bearer ${token}`;
     }
 
     try {
-      if (Platform.OS === 'web') {
-        const res = await fetch(fullUrl, { method: 'GET', headers });
+      let filePath: string;
+      if (Platform.OS === 'web' || body !== undefined) {
+        const res = await fetch(fullUrl, body === undefined
+          ? { headers }
+          : { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body });
         if (!res.ok) {
           throw new Error(`Lỗi tải file (HTTP ${res.status})`);
         }
-        const blob = await res.blob();
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = filename;
-        document.body.appendChild(a);
-        a.click();
-        window.URL.revokeObjectURL(url);
-        document.body.removeChild(a);
-        return { success: true, message: `Đã tải xuống file ${filename}` };
+        if (body !== undefined && !res.headers.get('Content-Type')?.includes(XLSX_MIME)) {
+          throw new Error('Máy chủ không trả về file Excel hợp lệ.');
+        }
+        if (Platform.OS === 'web') {
+          const blob = await res.blob();
+          const url = window.URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = filename;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          setTimeout(() => window.URL.revokeObjectURL(url), 1000);
+          return { success: true, message: `Đã tải xuống file ${filename}` };
+        }
+        const bytes = new Uint8Array(await res.arrayBuffer());
+        const file = new File(Paths.document, filename);
+        file.create({ overwrite: true });
+        file.write(bytes);
+        filePath = file.uri;
+      } else {
+        const fileUri = `${FileSystem.documentDirectory}${filename}`;
+        const downloaded = await FileSystem.downloadAsync(fullUrl, fileUri, { headers });
+        if (downloaded.status < 200 || downloaded.status >= 300) {
+          throw new Error(`Lỗi tải file (HTTP ${downloaded.status})`);
+        }
+        filePath = downloaded.uri;
       }
-
-      // Trên Android & iOS: Dùng FileSystem của expo-file-system
-      const fileUri = `${FileSystem.documentDirectory}${filename}`;
-      const downloaded = await FileSystem.downloadAsync(fullUrl, fileUri, {
-        headers,
-      });
 
       // Mở chia sẻ file
       const canShare = await Sharing.isAvailableAsync();
       if (canShare) {
-        await Sharing.shareAsync(downloaded.uri, {
-          mimeType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        await Sharing.shareAsync(filePath, {
+          mimeType: XLSX_MIME,
           dialogTitle: `Xuất file ${filename}`,
           UTI: 'com.microsoft.excel.xlsx',
         });
@@ -128,7 +156,7 @@ export const exportService = {
 
       return {
         success: true,
-        filePath: downloaded.uri,
+        filePath,
         message: `Đã lưu file thành công vào thiết bị: ${filename}`,
       };
     } catch (error: unknown) {
