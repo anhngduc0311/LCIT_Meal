@@ -22,8 +22,8 @@
       "icon": "./assets/images/lcit-android-icon.png",
       "softwareKeyboardLayoutMode": "resize",
       "permissions": [
-        "INTERNET",
-        "ACCESS_NETWORK_STATE"
+        "android.permission.INTERNET",
+        "android.permission.ACCESS_NETWORK_STATE"
       ],
       "adaptiveIcon": {
         "backgroundColor": "#014F3E",
@@ -69,9 +69,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "bb968308-4f79-4daf-87d7-4d9617367b13"
+        "projectId": "8c12f4d3-578b-4797-80ff-dd101ef523a1"
       }
     },
-    "owner": "akzan0311zs-team"
+    "owner": "akzan0311"
   }
 }

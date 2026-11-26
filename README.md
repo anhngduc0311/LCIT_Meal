@@ -19,6 +19,8 @@ Hệ thống số hóa toàn diện quy trình phục vụ bữa ăn trưa nội
 
 ---
 
+npx eas-cli build --platform ios --profile production --auto-submit
+
 ## 🏗️ Kiến trúc & Công nghệ
 
 Hệ thống được thiết kế theo mô hình Monorepo gồm 2 thành phần chính:
