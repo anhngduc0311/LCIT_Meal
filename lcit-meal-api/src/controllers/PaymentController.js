@@ -190,6 +190,21 @@ class PaymentController {
     }
   };
 
+  submitProof = async (req, res, next) => {
+    try {
+      const payment = await this.paymentService.submitProof(
+        req.params.id,
+        req.user.id,
+        req.file,
+        getActor(req),
+      );
+
+      return ApiResponse.success(res, payment);
+    } catch (error) {
+      next(error);
+    }
+  };
+
   markPaid = async (req, res, next) => {
     try {
       const payment = await this.paymentService.markPaid(

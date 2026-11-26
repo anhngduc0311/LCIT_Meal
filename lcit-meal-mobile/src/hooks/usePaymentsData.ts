@@ -3,7 +3,7 @@
  * Quản lý queries cho danh sách và tóm tắt thanh toán cá nhân (T23)
  */
 
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '../providers/AuthProvider';
 import { paymentService } from '../services/paymentService';
 import { Payment, MealLedger } from '../types';
@@ -28,5 +28,24 @@ export function useMyPaymentSummary() {
     queryKey: PAYMENT_QUERY_KEYS.mySummary(useMockData),
     queryFn: () => paymentService.getMyMealLedger(useMockData),
     refetchInterval: 60000,
+  });
+}
+
+export function useSubmitPaymentProof() {
+  const { useMockData } = useAuth();
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({
+      id,
+      asset,
+    }: {
+      id: number;
+      asset: { uri: string; mimeType?: string | null; fileName?: string | null; file?: File };
+    }) => paymentService.submitPaymentProof(id, asset, useMockData),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['payments'] });
+      queryClient.invalidateQueries({ queryKey: ['management', 'payments'] });
+    },
   });
 }

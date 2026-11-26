@@ -15,6 +15,7 @@ import {
   StyleSheet,
   ScrollView,
   Modal,
+  Image,
   ActivityIndicator,
   Alert,
   FlatList,
@@ -39,7 +40,7 @@ import {
   useDeletePayment,
 } from '../../src/hooks/useManagementPayments';
 import { exportService } from '../../src/services/exportService';
-import { formatCurrency, formatBusinessDateDisplay } from '../../src/utils/formatters';
+import { formatCurrency, formatBusinessDateDisplay, getMediaUrl } from '../../src/utils/formatters';
 import { colors } from '../../src/theme/colors';
 import { spacing } from '../../src/theme/spacing';
 import { typography } from '../../src/theme/typography';
@@ -61,6 +62,7 @@ export default function ManagementPaymentsScreen() {
   const [isEditOpen, setIsEditOpen] = useState(false);
   const [isMarkPaidOpen, setIsMarkPaidOpen] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
+  const [viewingProofPayment, setViewingProofPayment] = useState<Payment | null>(null);
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
   const [isExporting, setIsExporting] = useState(false);
 
@@ -96,7 +98,12 @@ export default function ManagementPaymentsScreen() {
       .trim();
 
   const filteredPayments = payments.filter((p) => {
-    const matchStatus = statusFilter === 'all' || p.status === statusFilter;
+    const matchStatus =
+      statusFilter === 'all'
+        ? true
+        : statusFilter === 'has_proof'
+          ? Boolean(p.billImg)
+          : p.status === statusFilter;
     if (!searchQuery.trim()) return matchStatus;
 
     const rawQuery = searchQuery.trim();
@@ -129,7 +136,10 @@ export default function ManagementPaymentsScreen() {
     try {
       const res = await exportService.exportPayments(
         {
-          status: statusFilter !== 'all' ? (statusFilter as PaymentStatus) : undefined,
+          status:
+            statusFilter !== 'all' && statusFilter !== 'has_proof'
+              ? (statusFilter as PaymentStatus)
+              : undefined,
         },
         isMockMode
       );
@@ -184,6 +194,8 @@ export default function ManagementPaymentsScreen() {
   const renderPaymentItem = useCallback(
     ({ item: p }: { item: Payment }) => {
       const isPaid = p.status === 'paid' || p.isPaid === 1 || p.isPaid === true;
+      const proofUrl = p.billImg ? getMediaUrl(p.billImg) : '';
+      const hasImageProof = Boolean(proofUrl && (p.billImg?.startsWith('/uploads/') || /^https?:\/\//.test(p.billImg || '') || p.billImg?.startsWith('file://') || p.billImg?.startsWith('data:')));
       return (
         <Card key={p.id} variant="elevated" padding="md" style={styles.paymentCard}>
           <View style={styles.paymentHeader}>
@@ -196,7 +208,15 @@ export default function ManagementPaymentsScreen() {
               </Text>
             </View>
             <Badge
-              label={isPaid ? 'Đã thu' : p.status === 'overdue' ? 'Quá hạn' : 'Chưa thu'}
+              label={
+                isPaid
+                  ? 'Đã thu'
+                  : p.billImg
+                    ? 'Đã gửi ảnh CK'
+                    : p.status === 'overdue'
+                      ? 'Quá hạn'
+                      : 'Chưa thu'
+              }
               variant={isPaid ? 'confirmed' : p.status === 'overdue' ? 'cancelled' : 'pending'}
               size="sm"
             />
@@ -213,12 +233,36 @@ export default function ManagementPaymentsScreen() {
                 Thực thu: <Text style={styles.boldText}>{formatCurrency(p.paidAmount)}</Text>{' '}
                 {p.paidAt ? `(${formatBusinessDateDisplay(p.paidAt.slice(0, 10))})` : ''}
               </Text>
-              {p.billImg && (
-                <Text style={styles.billImgText} numberOfLines={1}>
-                  Chứng từ: {p.billImg}
-                </Text>
-              )}
             </View>
+          )}
+
+          {p.billImg && (
+            <TouchableOpacity
+              style={styles.proofPreviewRow}
+              activeOpacity={0.75}
+              onPress={() => setViewingProofPayment(p)}
+            >
+              {hasImageProof ? (
+                <Image
+                  source={{ uri: proofUrl }}
+                  style={styles.proofThumbImg}
+                  resizeMode="cover"
+                />
+              ) : (
+                <View style={styles.proofThumbFallback}>
+                  <Ionicons name="document-text-outline" size={18} color={colors.primary} />
+                </View>
+              )}
+              <View style={{ flex: 1 }}>
+                <Text style={styles.proofRowTitle}>
+                  {isPaid ? 'Ảnh chứng từ chuyển khoản' : 'Người dùng đã gửi ảnh chuyển tiền'}
+                </Text>
+                <Text style={styles.proofRowSub} numberOfLines={1}>
+                  {hasImageProof ? 'Nhấn để xem ảnh phóng to' : p.billImg}
+                </Text>
+              </View>
+              <Ionicons name="eye-outline" size={18} color={colors.primary} />
+            </TouchableOpacity>
           )}
 
           {/* Actions */}
@@ -355,6 +399,7 @@ export default function ManagementPaymentsScreen() {
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.chipsScroll}>
           {[
             { id: 'all', label: 'Tất cả' },
+            { id: 'has_proof', label: `Đã gửi ảnh CK (${payments.filter((p) => Boolean(p.billImg)).length})` },
             { id: 'unpaid', label: 'Chưa thanh toán' },
             { id: 'paid', label: 'Đã thanh toán' },
             { id: 'overdue', label: 'Quá hạn' },
@@ -486,6 +531,17 @@ export default function ManagementPaymentsScreen() {
               </Text>
             </Text>
 
+            {selectedPayment?.billImg ? (
+              <View style={styles.markPaidProofBox}>
+                <Text style={styles.formSectionLabel}>Ảnh chuyển khoản người dùng đã gửi</Text>
+                <Image
+                  source={{ uri: getMediaUrl(selectedPayment.billImg) || selectedPayment.billImg }}
+                  style={styles.markPaidProofImg}
+                  resizeMode="contain"
+                />
+              </View>
+            ) : null}
+
             <Input
               label="Số tiền thực thu (VND)"
               value={markPaidAmount}
@@ -516,6 +572,79 @@ export default function ManagementPaymentsScreen() {
                 style={styles.modalBtnHalf}
               />
             </View>
+          </ModalCard>
+        </ModalBackdrop>
+      </Modal>
+
+      {/* Modal xem ảnh xác nhận chuyển khoản của cán bộ */}
+      <Modal
+        visible={viewingProofPayment !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setViewingProofPayment(null)}
+      >
+        <ModalBackdrop style={styles.modalOverlay}>
+          <ModalCard style={styles.modalDialog}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Ảnh xác nhận chuyển khoản</Text>
+              <TouchableOpacity onPress={() => setViewingProofPayment(null)} activeOpacity={0.7}>
+                <Ionicons name="close" size={22} color={colors.textSecondary} />
+              </TouchableOpacity>
+            </View>
+
+            {viewingProofPayment && (
+              <>
+                <Text style={styles.markPaidNotice}>
+                  Cán bộ:{' '}
+                  <Text style={styles.boldText}>
+                    {viewingProofPayment.user?.fullName || viewingProofPayment.userName || 'Cán bộ'}
+                  </Text>
+                  {'\n'}
+                  Kỳ: {formatBusinessDateDisplay(viewingProofPayment.paymentDate)} · Số tiền:{' '}
+                  <Text style={[styles.boldText, { color: colors.primaryDark }]}>
+                    {formatCurrency(viewingProofPayment.amount)}
+                  </Text>
+                </Text>
+
+                {viewingProofPayment.billImg ? (
+                  <Image
+                    source={{
+                      uri: getMediaUrl(viewingProofPayment.billImg) || viewingProofPayment.billImg,
+                    }}
+                    style={styles.proofModalImg}
+                    resizeMode="contain"
+                  />
+                ) : null}
+
+                <View style={styles.modalActionRow}>
+                  <Button
+                    title="Đóng"
+                    variant="secondary"
+                    onPress={() => setViewingProofPayment(null)}
+                    style={styles.modalBtnHalf}
+                  />
+                  {!(
+                    viewingProofPayment.status === 'paid' ||
+                    viewingProofPayment.isPaid === 1 ||
+                    viewingProofPayment.isPaid === true
+                  ) && (
+                    <Button
+                      title="Xác nhận đã thu"
+                      variant="primary"
+                      onPress={() => {
+                        const target = viewingProofPayment;
+                        setViewingProofPayment(null);
+                        setSelectedPayment(target);
+                        setMarkPaidAmount(String(target.amount));
+                        setMarkPaidBillImg(target.billImg || '');
+                        setIsMarkPaidOpen(true);
+                      }}
+                      style={styles.modalBtnHalf}
+                    />
+                  )}
+                </View>
+              </>
+            )}
           </ModalCard>
         </ModalBackdrop>
       </Modal>
@@ -687,6 +816,59 @@ const styles = StyleSheet.create({
     color: colors.textMuted,
     fontStyle: 'italic',
     marginTop: 2,
+  },
+  proofPreviewRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+    padding: spacing.xs,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  proofThumbImg: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: colors.backgroundDark,
+  },
+  proofThumbFallback: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    backgroundColor: colors.primaryLight,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  proofRowTitle: {
+    fontSize: 11,
+    fontWeight: typography.weights.semibold,
+    color: colors.primaryDark,
+  },
+  proofRowSub: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  markPaidProofBox: {
+    marginBottom: spacing.sm,
+  },
+  markPaidProofImg: {
+    width: '100%',
+    height: 160,
+    borderRadius: radius.md,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  proofModalImg: {
+    width: '100%',
+    height: 360,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
+    marginBottom: spacing.md,
   },
   paymentFooter: {
     flexWrap: 'wrap',

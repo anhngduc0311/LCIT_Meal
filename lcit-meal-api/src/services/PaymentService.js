@@ -1,7 +1,15 @@
+const fs = require("fs/promises");
+const path = require("path");
 const PAYMENT_STATUS = require("../constants/Payment");
 const LOG_ACTION = require("../constants/LogAction");
 const AppError = require("../ultis/AppError");
 const { buildMealLedger } = require('../ultis/mealLedger');
+
+const ALLOWED_PROOF_MIME_TYPES = {
+  "image/png": "png",
+  "image/jpeg": "jpg",
+  "image/webp": "webp",
+};
 
 class PaymentService {
   constructor(paymentRepository, notificationService, auditLogService) {
@@ -136,6 +144,43 @@ class PaymentService {
       actor,
       `payment:${id}`,
       "Cập nhật khoản thanh toán",
+      payment,
+      updated,
+    );
+
+    return updated;
+  }
+
+  // Người dùng gửi ảnh xác nhận đã chuyển khoản cho hóa đơn của chính mình
+  async submitProof(id, userId, file, actor = {}) {
+    const payment = await this.get(id);
+
+    if (Number(payment.userId) !== Number(userId)) {
+      throw new AppError("Bạn không có quyền gửi ảnh chuyển khoản cho hóa đơn này", 403);
+    }
+
+    if (payment.isPaid || payment.status === PAYMENT_STATUS.PAID) {
+      throw new AppError("Khoản thanh toán này đã được xác nhận trước đó", 409);
+    }
+
+    const extension = file && ALLOWED_PROOF_MIME_TYPES[file.mimetype];
+    if (!extension || !file.buffer || file.buffer.length === 0) {
+      throw new AppError("Vui lòng chọn ảnh chuyển khoản hợp lệ (PNG, JPG, WEBP)", 400);
+    }
+
+    const uploadDir = path.join(__dirname, "../../public/uploads/payment-proofs");
+    await fs.mkdir(uploadDir, { recursive: true });
+    const filename = `payment-${payment.id}-${Date.now()}.${extension}`;
+    await fs.writeFile(path.join(uploadDir, filename), file.buffer);
+
+    const billImg = `/uploads/payment-proofs/${filename}`;
+    const updated = await this.paymentRepository.updateBillImg(id, billImg);
+
+    await this.logAction(
+      LOG_ACTION.ACTION_UPDATE,
+      actor,
+      `payment:${id}`,
+      "Người dùng gửi ảnh xác nhận chuyển khoản",
       payment,
       updated,
     );

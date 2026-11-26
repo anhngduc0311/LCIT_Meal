@@ -637,6 +637,15 @@ class MockStore {
     return p;
   }
 
+  submitPaymentProof(id: number, billImg: string): Payment | null {
+    const p = this.payments.find((x) => x.id === id);
+    if (!p) return null;
+    p.billImg = billImg;
+    this.log('submit_payment_proof', `payment:${id}`, `Người dùng gửi ảnh chuyển khoản cho khoản thu ID ${id}`);
+    this.notify();
+    return p;
+  }
+
   markPaymentPaid(id: number, paidAmount?: number, billImg?: string | null): Payment | null {
     const p = this.payments.find((x) => x.id === id);
     if (!p) return null;

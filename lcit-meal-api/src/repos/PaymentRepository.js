@@ -204,6 +204,20 @@ class PaymentRepository {
     return this.get(id);
   }
 
+  // Cập nhật ảnh xác nhận chuyển khoản (do người dùng gửi lên)
+  async updateBillImg(id, billImg) {
+    await pool.query(
+      `
+            UPDATE payment
+            SET bill_img = ?
+            WHERE id = ?
+        `,
+      [billImg, id],
+    );
+
+    return this.get(id);
+  }
+
   // Xác nhận đã thanh toán (kèm số tiền thực trả + ảnh hóa đơn)
   async markPaid(id, data) {
     await pool.query(

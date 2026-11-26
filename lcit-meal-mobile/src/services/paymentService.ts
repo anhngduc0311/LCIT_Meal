@@ -169,6 +169,41 @@ export const paymentService = {
   },
 
   /**
+   * Người dùng gửi ảnh xác nhận đã chuyển khoản: POST /api/payments/:id/proof
+   */
+  async submitPaymentProof(
+    id: number,
+    asset: { uri: string; mimeType?: string | null; fileName?: string | null; file?: File },
+    useMock = false
+  ): Promise<Payment> {
+    if (useMock) {
+      await new Promise((res) => setTimeout(res, 300));
+      const updated = mockStore.submitPaymentProof(id, asset.uri);
+      if (!updated) throw new Error('Gửi ảnh xác nhận chuyển khoản thất bại');
+      return updated;
+    }
+
+    const formData = new FormData();
+    if (asset.file) {
+      formData.append('file', asset.file);
+    } else {
+      const mimeType = asset.mimeType || 'image/jpeg';
+      const fallbackExt = mimeType === 'image/png' ? 'png' : mimeType === 'image/webp' ? 'webp' : 'jpg';
+      const fileName = asset.fileName || asset.uri.split('/').pop() || `payment-proof-${id}.${fallbackExt}`;
+      formData.append('file', {
+        uri: asset.uri,
+        name: fileName,
+        type: mimeType,
+      } as unknown as Blob);
+    }
+
+    return await apiClient<Payment>(`/payments/${id}/proof`, {
+      method: 'POST',
+      body: formData,
+    });
+  },
+
+  /**
    * Đánh dấu đã thanh toán (Admin/Manager): PATCH /api/payments/:id/mark-paid
    * Chỉ gửi paidAmount và billImg dạng chuỗi URL/mã tham chiếu theo API thực tế
    */

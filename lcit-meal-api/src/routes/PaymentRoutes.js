@@ -1,6 +1,20 @@
 const express = require("express");
+const multer = require("multer");
 
 const ROLE = require("../constants/Role");
+const AppError = require("../ultis/AppError");
+
+const paymentProofUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, callback) => {
+    if (["image/png", "image/jpeg", "image/webp"].includes(file.mimetype)) {
+      callback(null, true);
+    } else {
+      callback(new AppError("Chỉ hỗ trợ ảnh định dạng PNG, JPG hoặc WEBP", 400));
+    }
+  },
+}).single("file");
 
 // Xem/đối soát thanh toán: admin + manager + kitchen.
 // Xem lịch sử thanh toán của chính mình: mọi user đã đăng nhập.
@@ -53,6 +67,22 @@ const paymentRoutes = (paymentController, authMiddleware, authorize) => {
     "/:id",
     authorize(ROLE.ADMIN, ROLE.MANAGER),
     paymentController.update,
+  );
+
+  // POST /api/payments/:id/proof - nhân viên gửi ảnh xác nhận đã chuyển khoản
+  router.post(
+    "/:id/proof",
+    authorize(...ROLE.STAFF_ROLES),
+    (req, res, next) =>
+      paymentProofUpload(req, res, (error) => {
+        if (error instanceof multer.MulterError) {
+          return next(
+            new AppError("Ảnh chuyển khoản không hợp lệ hoặc vượt quá 5 MB", 400),
+          );
+        }
+        next(error);
+      }),
+    paymentController.submitProof,
   );
 
   // PATCH /api/payments/:id/mark-paid - xác nhận đã thanh toán

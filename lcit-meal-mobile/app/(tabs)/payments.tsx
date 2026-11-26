@@ -17,6 +17,7 @@ import {
   Image,
   TouchableWithoutFeedback,
   FlatList,
+  ScrollView,
   Alert,
   Platform,
   Share,
@@ -24,6 +25,7 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
+import * as ImagePicker from 'expo-image-picker';
 import { ScreenContainer } from '../../src/components/common/ScreenContainer';
 import { ModalCard } from '../../src/components/common/ModalCard';
 import { useResponsiveLayout } from '../../src/hooks/useResponsiveLayout';
@@ -34,7 +36,11 @@ import { Button } from '../../src/components/common/Button';
 import { EmptyState } from '../../src/components/states/EmptyState';
 import { useAuth } from '../../src/providers/AuthProvider';
 import ManagementPaymentsScreen from '../management/payments';
-import { useMyPayments, useMyPaymentSummary } from '../../src/hooks/usePaymentsData';
+import {
+  useMyPayments,
+  useMyPaymentSummary,
+  useSubmitPaymentProof,
+} from '../../src/hooks/usePaymentsData';
 import { useScheduleConfig } from '../../src/hooks/useMealsData';
 import { Payment } from '../../src/types';
 import {
@@ -60,13 +66,16 @@ function PersonalPaymentsScreen() {
 
   const [selectedPayment, setSelectedPayment] = useState<Payment | null>(null);
   const [qrModalVisible, setQrModalVisible] = useState(false);
+  const [proofPreviewUrl, setProofPreviewUrl] = useState<string | null>(null);
+  const [pickedProof, setPickedProof] = useState<ImagePicker.ImagePickerAsset | null>(null);
   const [filterMode, setFilterMode] = useState<'all' | 'unpaid' | 'paid'>('all');
   const [isSharingQr, setIsSharingQr] = useState(false);
 
-  // Queries
+  // Queries & Mutations
   const { data: payments = [], isLoading: loadingPayments, refetch: refetchPayments } = useMyPayments();
   const { data: summary, isLoading: loadingSummary, isError: summaryError, refetch: refetchSummary } = useMyPaymentSummary();
   const { data: scheduleConfig } = useScheduleConfig();
+  const submitProofMutation = useSubmitPaymentProof();
 
   const isRefreshing = loadingPayments || loadingSummary;
 
@@ -76,7 +85,85 @@ function PersonalPaymentsScreen() {
 
   const handleOpenQr = (p: Payment) => {
     setSelectedPayment(p);
+    setPickedProof(null);
     setQrModalVisible(true);
+  };
+
+  const handleCloseQr = () => {
+    setQrModalVisible(false);
+    setPickedProof(null);
+  };
+
+  const handlePickProofFromLibrary = async () => {
+    try {
+      if (Platform.OS !== 'web') {
+        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+        if (status !== 'granted') {
+          Alert.alert('Cần quyền truy cập', 'Vui lòng cấp quyền truy cập thư viện ảnh để tải lên ảnh chuyển khoản.');
+          return;
+        }
+      }
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setPickedProof(result.assets[0]);
+      }
+    } catch {
+      Alert.alert('Lỗi', 'Không thể mở thư viện ảnh. Vui lòng thử lại.');
+    }
+  };
+
+  const handleTakeProofPhoto = async () => {
+    try {
+      const { status } = await ImagePicker.requestCameraPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Cần quyền truy cập', 'Vui lòng cấp quyền camera để chụp ảnh chuyển khoản.');
+        return;
+      }
+      const result = await ImagePicker.launchCameraAsync({
+        mediaTypes: ['images'],
+        quality: 0.85,
+      });
+      if (!result.canceled && result.assets[0]) {
+        setPickedProof(result.assets[0]);
+      }
+    } catch {
+      Alert.alert('Lỗi', 'Không thể mở camera. Vui lòng thử lại.');
+    }
+  };
+
+  const handleConfirmTransferred = async () => {
+    if (!selectedPayment) return;
+    if (!pickedProof) {
+      if (selectedPayment.billImg) {
+        Alert.alert('Thông báo', 'Bạn đã gửi ảnh chuyển khoản cho kỳ này rồi. Chọn ảnh mới nếu muốn cập nhật.');
+        return;
+      }
+      Alert.alert('Thiếu ảnh chuyển khoản', 'Vui lòng tải lên ảnh chụp màn hình đã chuyển tiền trước khi xác nhận.');
+      return;
+    }
+
+    try {
+      await submitProofMutation.mutateAsync({
+        id: selectedPayment.id,
+        asset: {
+          uri: pickedProof.uri,
+          mimeType: pickedProof.mimeType,
+          fileName: pickedProof.fileName,
+          file: (pickedProof as ImagePicker.ImagePickerAsset & { file?: File }).file,
+        },
+      });
+      Alert.alert(
+        'Đã xác nhận chuyển tiền',
+        'Ảnh chuyển khoản đã được gửi lên hệ thống. Quản trị viên sẽ kiểm tra và duyệt khoản thanh toán của bạn.'
+      );
+      handleCloseQr();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Gửi ảnh xác nhận chuyển tiền thất bại';
+      Alert.alert('Lỗi', msg);
+    }
   };
 
   const unpaidTotal = summary?.totalUnpaidAmount || 0;
@@ -182,12 +269,12 @@ function PersonalPaymentsScreen() {
 
             {isUnpaid ? (
               <Button
-                title="Quét mã QR"
+                title={item.billImg ? 'Cập nhật ảnh CK' : 'Thanh toán & Gửi ảnh'}
                 variant="primary"
                 size="sm"
                 leftIcon={
                   <Ionicons
-                    name="qr-code-outline"
+                    name={item.billImg ? 'image-outline' : 'qr-code-outline'}
                     size={16}
                     color={colors.textInverse}
                   />
@@ -205,6 +292,30 @@ function PersonalPaymentsScreen() {
               </View>
             )}
           </View>
+
+          {item.billImg ? (
+            <TouchableOpacity
+              style={styles.proofBanner}
+              activeOpacity={0.75}
+              onPress={() => {
+                const url = getMediaUrl(item.billImg);
+                if (url) setProofPreviewUrl(url);
+              }}
+            >
+              <Image
+                source={{ uri: getMediaUrl(item.billImg) || item.billImg }}
+                style={styles.proofThumb}
+                resizeMode="cover"
+              />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.proofBannerTitle}>
+                  {isUnpaid ? 'Đã gửi ảnh chuyển khoản · Chờ xác nhận' : 'Ảnh xác nhận chuyển khoản'}
+                </Text>
+                <Text style={styles.proofBannerSub}>Nhấn để xem ảnh đã gửi</Text>
+              </View>
+              <Ionicons name="eye-outline" size={18} color={colors.primary} />
+            </TouchableOpacity>
+          ) : null}
         </Card>
       );
     },
@@ -309,22 +420,22 @@ function PersonalPaymentsScreen() {
         windowSize={5}
       />
 
-      {/* Modal Quét mã QR chuyển khoản */}
+      {/* Modal Quét mã QR chuyển khoản & Gửi ảnh xác nhận */}
       <Modal
         visible={qrModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => setQrModalVisible(false)}
+        onRequestClose={handleCloseQr}
       >
-        <TouchableWithoutFeedback onPress={() => setQrModalVisible(false)}>
+        <TouchableWithoutFeedback onPress={handleCloseQr}>
           <ModalBackdrop style={styles.modalBackdrop}>
             <TouchableWithoutFeedback>
               <ModalCard style={[styles.qrCard, shadows.xl]}>
                 <View style={styles.qrHeader}>
-                  <Text style={styles.qrTitle}>Mã QR Chuyển khoản</Text>
+                  <Text style={styles.qrTitle}>Thanh toán chuyển khoản</Text>
                   <TouchableOpacity
                     activeOpacity={0.7}
-                    onPress={() => setQrModalVisible(false)}
+                    onPress={handleCloseQr}
                     style={styles.closeBtn}
                   >
                     <Ionicons name="close" size={24} color={colors.textSecondary} />
@@ -332,7 +443,11 @@ function PersonalPaymentsScreen() {
                 </View>
 
                 {selectedPayment && (
-                  <>
+                  <ScrollView
+                    style={{ width: '100%' }}
+                    contentContainerStyle={styles.qrScrollContent}
+                    showsVerticalScrollIndicator={false}
+                  >
                     <View style={styles.qrAmountBox}>
                       <Text style={styles.qrAmountLabel}>Số tiền cần chuyển:</Text>
                       <Text style={styles.qrAmountValue}>
@@ -389,27 +504,140 @@ function PersonalPaymentsScreen() {
                       </TouchableOpacity>
                     </View>
 
-                    {/* Share / Save QR action buttons */}
+                    {/* Upload ảnh đã chuyển tiền */}
+                    <View style={styles.proofUploadSection}>
+                      <Text style={styles.proofUploadLabel}>
+                        Ảnh xác nhận đã chuyển tiền *
+                      </Text>
+                      {pickedProof || selectedPayment.billImg ? (
+                        <View style={styles.proofPreviewBox}>
+                          <Image
+                            source={{
+                              uri:
+                                pickedProof?.uri ||
+                                getMediaUrl(selectedPayment.billImg) ||
+                                selectedPayment.billImg ||
+                                '',
+                            }}
+                            style={styles.proofPreviewImg}
+                            resizeMode="contain"
+                          />
+                          <View style={styles.proofPickerRow}>
+                            <Button
+                              title="Chọn ảnh khác"
+                              variant="secondary"
+                              size="sm"
+                              leftIcon={<Ionicons name="images-outline" size={16} color={colors.text} />}
+                              onPress={handlePickProofFromLibrary}
+                              style={{ flex: 1 }}
+                            />
+                            {Platform.OS !== 'web' && (
+                              <Button
+                                title="Chụp lại"
+                                variant="secondary"
+                                size="sm"
+                                leftIcon={<Ionicons name="camera-outline" size={16} color={colors.text} />}
+                                onPress={handleTakeProofPhoto}
+                                style={{ flex: 1 }}
+                              />
+                            )}
+                          </View>
+                        </View>
+                      ) : (
+                        <View style={styles.proofEmptyBox}>
+                          <Ionicons name="cloud-upload-outline" size={28} color={colors.primary} />
+                          <Text style={styles.proofEmptyText}>
+                            Tải lên ảnh chụp màn hình chuyển khoản thành công
+                          </Text>
+                          <View style={styles.proofPickerRow}>
+                            <Button
+                              title="Chọn từ thư viện"
+                              variant="secondary"
+                              size="sm"
+                              leftIcon={<Ionicons name="images-outline" size={16} color={colors.text} />}
+                              onPress={handlePickProofFromLibrary}
+                              style={{ flex: 1 }}
+                            />
+                            {Platform.OS !== 'web' && (
+                              <Button
+                                title="Chụp ảnh"
+                                variant="secondary"
+                                size="sm"
+                                leftIcon={<Ionicons name="camera-outline" size={16} color={colors.text} />}
+                                onPress={handleTakeProofPhoto}
+                                style={{ flex: 1 }}
+                              />
+                            )}
+                          </View>
+                        </View>
+                      )}
+                    </View>
+
+                    {/* Share QR + Xác nhận đã chuyển tiền */}
                     <View style={[styles.qrActionButtons, compact && { flexDirection: 'column' }]}>
                       <Button
-                        title={isSharingQr ? 'Đang chia sẻ...' : 'Lưu / Chia sẻ mã QR'}
+                        title={isSharingQr ? 'Đang chia sẻ...' : 'Lưu / Chia sẻ QR'}
                         variant="secondary"
                         size="md"
                         leftIcon={<Ionicons name="share-social-outline" size={18} color={colors.text} />}
                         onPress={handleShareQr}
-                        disabled={isSharingQr}
+                        disabled={isSharingQr || submitProofMutation.isPending}
                         style={{ flex: 1 }}
                       />
                       <Button
-                        title="Đã chuyển"
+                        title="Xác nhận đã chuyển tiền"
                         variant="primary"
                         size="md"
-                        onPress={() => setQrModalVisible(false)}
+                        leftIcon={<Ionicons name="checkmark-circle-outline" size={18} color={colors.textInverse} />}
+                        onPress={handleConfirmTransferred}
+                        loading={submitProofMutation.isPending}
+                        disabled={submitProofMutation.isPending}
                         style={{ flex: 1 }}
                       />
                     </View>
-                  </>
+                  </ScrollView>
                 )}
+              </ModalCard>
+            </TouchableWithoutFeedback>
+          </ModalBackdrop>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Modal xem ảnh chuyển khoản đã gửi */}
+      <Modal
+        visible={Boolean(proofPreviewUrl)}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setProofPreviewUrl(null)}
+      >
+        <TouchableWithoutFeedback onPress={() => setProofPreviewUrl(null)}>
+          <ModalBackdrop style={styles.modalBackdrop}>
+            <TouchableWithoutFeedback>
+              <ModalCard style={[styles.qrCard, shadows.xl]}>
+                <View style={styles.qrHeader}>
+                  <Text style={styles.qrTitle}>Ảnh xác nhận chuyển khoản</Text>
+                  <TouchableOpacity
+                    activeOpacity={0.7}
+                    onPress={() => setProofPreviewUrl(null)}
+                    style={styles.closeBtn}
+                  >
+                    <Ionicons name="close" size={24} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                </View>
+                {proofPreviewUrl ? (
+                  <Image
+                    source={{ uri: proofPreviewUrl }}
+                    style={styles.fullProofImage}
+                    resizeMode="contain"
+                  />
+                ) : null}
+                <Button
+                  title="Đóng"
+                  variant="secondary"
+                  size="md"
+                  onPress={() => setProofPreviewUrl(null)}
+                  style={{ width: '100%', marginTop: spacing.md }}
+                />
               </ModalCard>
             </TouchableWithoutFeedback>
           </ModalBackdrop>
@@ -632,5 +860,88 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
     width: '100%',
     marginTop: spacing.xs,
+  },
+  qrScrollContent: {
+    alignItems: 'center',
+    paddingBottom: spacing.xs,
+  },
+  proofBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  proofThumb: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.md,
+    backgroundColor: colors.backgroundDark,
+  },
+  proofBannerTitle: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.semibold,
+    color: colors.primaryDark,
+  },
+  proofBannerSub: {
+    fontSize: typography.sizes['2xs'],
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  proofUploadSection: {
+    width: '100%',
+    marginBottom: spacing.md,
+  },
+  proofUploadLabel: {
+    fontSize: typography.sizes.xs,
+    fontWeight: typography.weights.bold,
+    color: colors.text,
+    marginBottom: spacing.xs,
+  },
+  proofEmptyBox: {
+    width: '100%',
+    alignItems: 'center',
+    padding: spacing.md,
+    borderRadius: radius.lg,
+    borderWidth: 1.5,
+    borderStyle: 'dashed',
+    borderColor: colors.primary,
+    backgroundColor: colors.surfaceSubtle,
+    gap: spacing.xs,
+  },
+  proofEmptyText: {
+    fontSize: typography.sizes.xs,
+    color: colors.textSecondary,
+    textAlign: 'center',
+  },
+  proofPreviewBox: {
+    width: '100%',
+    padding: spacing.sm,
+    borderRadius: radius.lg,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surfaceSubtle,
+    gap: spacing.sm,
+  },
+  proofPreviewImg: {
+    width: '100%',
+    height: 180,
+    borderRadius: radius.md,
+    backgroundColor: colors.backgroundDark,
+  },
+  proofPickerRow: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    width: '100%',
+  },
+  fullProofImage: {
+    width: '100%',
+    height: 360,
+    borderRadius: radius.lg,
+    backgroundColor: colors.surfaceSubtle,
   },
 });

@@ -1,6 +1,6 @@
 {
   "expo": {
-    "name": "LCIT Meal",
+    "name": "Cơm365",
     "slug": "lcitmeal",
     "version": "1.0.0",
     "orientation": "portrait",
@@ -12,6 +12,7 @@
       "bundleIdentifier": "com.lcit.meal",
       "icon": "./assets/images/icon.png",
       "infoPlist": {
+        "CFBundleDisplayName": "Cơm365",
         "ITSAppUsesNonExemptEncryption": false
       },
       "supportsTablet": true
@@ -47,8 +48,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Cho phép LCIT Meal chọn ảnh mã QR từ thư viện.",
-          "cameraPermission": "Cho phép LCIT Meal chụp ảnh mã QR.",
+          "photosPermission": "Cho phép Cơm365 chọn ảnh từ thư viện.",
+          "cameraPermission": "Cho phép Cơm365 chụp ảnh.",
           "microphonePermission": false
         }
       ],
