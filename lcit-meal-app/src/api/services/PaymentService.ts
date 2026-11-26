@@ -7,9 +7,10 @@ export type PaymentStatus = "unpaid" | "paid" | "overdue";
 export type Payment = {
   id: number;
   userId: number;
+  userName?: string;
   paymentDate: string;
   amount: number;
-  isPaid: 0 | 1;
+  isPaid: 0 | 1 | boolean;
   paidAt: string | null;
   paidAmount: number | null;
   billImg: string | null;
@@ -141,6 +142,16 @@ export class PaymentService {
     const res = await this.client.put<ApiResponse<Payment>>(
       `/payments/${id}`,
       payload,
+    );
+    return res.payload;
+  }
+
+  async submitProof(id: number | string, file: File): Promise<Payment> {
+    const formData = new FormData();
+    formData.append("file", file);
+    const res = await this.client.post<ApiResponse<Payment>>(
+      `/payments/${id}/proof`,
+      formData,
     );
     return res.payload;
   }

@@ -1,10 +1,18 @@
 import { useEffect, useState } from "react";
 import { useNotification } from "@/hooks/useNotification";
-import { settingsService, reportService, ApiError } from "@/api";
+import {
+  settingsService,
+  reportService,
+  paymentService,
+  getSettingAssetUrl,
+  ApiError,
+  type Payment,
+} from "@/api";
 import { inputClass, panelClass } from "../shared/adminUiStyles";
 import { PageTitle } from "../shared/AdminUI";
 import PageMeta from "@/components/common/PageMeta";
 import PaymentQrBlock from "@/components/payments/PaymentQrBlock";
+import PaymentStatusBadge from "@/components/payments/PaymentStatusBadge";
 import { formatCurrency } from "@/helper/FormatHelper";
 import { buildSiteOneReport, type SiteOneReport } from "@/helper/mealReport";
 import { pageMeta } from "../PageMeta";
@@ -22,6 +30,9 @@ export default function MealPaymentReports() {
   const [reload, setReload] = useState(0);
   const [isExporting, setIsExporting] = useState(false);
   const [paymentQr, setPaymentQr] = useState("");
+  const [paymentFilter, setPaymentFilter] = useState<"all" | "has_proof" | "unpaid" | "paid">("all");
+  const [viewingProof, setViewingProof] = useState<{ payment: Payment; userName: string } | null>(null);
+  const [confirmingPaymentId, setConfirmingPaymentId] = useState<number | null>(null);
   const { showNotification } = useNotification();
   const meal = tab === "meals";
   const loading = state.month !== month;
@@ -61,6 +72,37 @@ export default function MealPaymentReports() {
       showNotification(error instanceof Error ? error.message : "Không xuất được Excel", "error");
     } finally { setIsExporting(false); }
   };
+
+  const handleMarkPaid = async (payment: Payment) => {
+    setConfirmingPaymentId(payment.id);
+    try {
+      await paymentService.markPaid(payment.id, {
+        paidAmount: Number(payment.amount),
+        billImg: payment.billImg || undefined,
+      });
+      showNotification("Đã xác nhận thu tiền thành công", "success");
+      setViewingProof(null);
+      setState({ month: "", report: null, error: null });
+      setReload((value) => value + 1);
+    } catch (error) {
+      showNotification(
+        error instanceof ApiError ? error.message : "Xác nhận thu tiền thất bại",
+        "error",
+      );
+    } finally {
+      setConfirmingPaymentId(null);
+    }
+  };
+
+  const userNameById = new Map((report?.users ?? []).map((u) => [u.id, u.fullName]));
+  const proofCount = (report?.payments ?? []).filter((p) => Boolean(p.billImg)).length;
+  const filteredReportPayments = (report?.payments ?? []).filter((p) => {
+    const isPaid = p.status === "paid" || Boolean(p.isPaid);
+    if (paymentFilter === "has_proof") return Boolean(p.billImg);
+    if (paymentFilter === "paid") return isPaid;
+    if (paymentFilter === "unpaid") return !isPaid;
+    return true;
+  });
 
   const cards = !report ? [] : meal ? [
     { label: "Tổng lượt đăng ký", value: number(report.totalRequests), note: `${number(report.totals.staff)} lượt cán bộ có suất · ${number(report.totals.pending)} chờ duyệt` },
@@ -130,10 +172,183 @@ export default function MealPaymentReports() {
               </table></div>
               {report.totalRequests === 0 && report.guests.length === 0 && <p className="p-5 text-sm text-gray-500">Chưa có đăng ký suất ăn tại cơ sở 1 trong kỳ này.</p>}
             </div> : <>
-              {report.payments.length === 0 && <p className={`${panelClass} p-5 text-sm text-gray-500`}>Chưa có hóa đơn của cán bộ cơ sở 1 trong kỳ này. Tiền phải thu được hiển thị theo các hóa đơn đã lập.</p>}
+              <div className={`${panelClass} overflow-hidden`}>
+                <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 p-5 dark:border-gray-800">
+                  <div>
+                    <h2 className="font-semibold text-gray-900 dark:text-white">
+                      Danh sách hóa đơn &amp; Ảnh chuyển khoản · Cơ sở 1
+                    </h2>
+                    <p className="mt-1 text-sm text-gray-500">
+                      Xem ảnh xác nhận chuyển khoản của cán bộ và xác nhận đã thu tiền.
+                    </p>
+                  </div>
+                  <div className="inline-flex flex-wrap rounded-lg border border-gray-200 p-0.5 dark:border-gray-700">
+                    {([
+                      ["all", `Tất cả (${report.payments.length})`],
+                      ["has_proof", `Đã gửi ảnh CK (${proofCount})`],
+                      ["unpaid", "Chưa thanh toán"],
+                      ["paid", "Đã thanh toán"],
+                    ] as const).map(([value, label]) => (
+                      <button
+                        key={value}
+                        type="button"
+                        onClick={() => setPaymentFilter(value)}
+                        className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+                          paymentFilter === value
+                            ? "bg-brand-500 text-white"
+                            : "text-gray-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:bg-white/5"
+                        }`}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {filteredReportPayments.length === 0 ? (
+                  <p className="p-5 text-sm text-gray-500">
+                    {report.payments.length === 0
+                      ? "Chưa có hóa đơn của cán bộ cơ sở 1 trong kỳ này. Tiền phải thu được hiển thị theo các hóa đơn đã lập."
+                      : "Không có hóa đơn nào phù hợp bộ lọc."}
+                  </p>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-gray-50 text-gray-600 dark:bg-gray-800 dark:text-gray-300">
+                        <tr>
+                          <th className="whitespace-nowrap px-5 py-3 text-left">Cán bộ</th>
+                          <th className="whitespace-nowrap px-5 py-3 text-left">Kỳ thanh toán</th>
+                          <th className="whitespace-nowrap px-5 py-3 text-right">Số tiền</th>
+                          <th className="whitespace-nowrap px-5 py-3 text-left">Trạng thái</th>
+                          <th className="whitespace-nowrap px-5 py-3 text-left">Ảnh chuyển khoản</th>
+                          <th className="whitespace-nowrap px-5 py-3 text-right">Thao tác</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-100 dark:divide-gray-800">
+                        {filteredReportPayments.map((payment) => {
+                          const isPaid = payment.status === "paid" || Boolean(payment.isPaid);
+                          const name = payment.userName || userNameById.get(payment.userId) || `Cán bộ #${payment.userId}`;
+                          const proofUrl = payment.billImg ? getSettingAssetUrl(payment.billImg) : "";
+                          return (
+                            <tr key={payment.id} className="text-gray-700 dark:text-gray-300">
+                              <td className="px-5 py-3 font-medium text-gray-900 dark:text-white">
+                                {name}
+                              </td>
+                              <td className="px-5 py-3">
+                                {payment.paymentDate.slice(8, 10)}/{payment.paymentDate.slice(5, 7)}/{payment.paymentDate.slice(0, 4)}
+                              </td>
+                              <td className="px-5 py-3 text-right font-semibold tabular-nums">
+                                {formatCurrency(payment.amount)}
+                              </td>
+                              <td className="px-5 py-3">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                  <PaymentStatusBadge status={payment.status} />
+                                  {!isPaid && payment.billImg && (
+                                    <span className="rounded-full bg-blue-50 px-2 py-0.5 text-xs font-medium text-blue-700 dark:bg-blue-500/15 dark:text-blue-300">
+                                      Đã gửi ảnh CK
+                                    </span>
+                                  )}
+                                </div>
+                              </td>
+                              <td className="px-5 py-3">
+                                {proofUrl ? (
+                                  <button
+                                    type="button"
+                                    onClick={() => setViewingProof({ payment, userName: name })}
+                                    className="inline-flex items-center gap-2 rounded-lg border border-gray-300 px-2.5 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+                                  >
+                                    <img
+                                      src={proofUrl}
+                                      alt={`Ảnh chuyển khoản của ${name}`}
+                                      className="h-7 w-7 rounded object-cover"
+                                    />
+                                    Xem ảnh CK
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-gray-400">Chưa có ảnh</span>
+                                )}
+                              </td>
+                              <td className="px-5 py-3 text-right">
+                                {!isPaid ? (
+                                  <button
+                                    type="button"
+                                    disabled={confirmingPaymentId === payment.id}
+                                    onClick={() => { void handleMarkPaid(payment); }}
+                                    className="rounded-lg bg-brand-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+                                  >
+                                    {confirmingPaymentId === payment.id ? "Đang lưu..." : "Xác nhận đã thu"}
+                                  </button>
+                                ) : (
+                                  <span className="text-xs text-success-600">Hoàn tất</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
               <div className="max-w-lg"><PaymentQrBlock title="QR thanh toán" value={paymentQr} /></div>
             </>}
           </>}
     </div>
+
+    {viewingProof && (
+      <div
+        className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+        onClick={() => setViewingProof(null)}
+      >
+        <div
+          className="w-full max-w-2xl rounded-2xl bg-white p-6 shadow-xl dark:bg-gray-900"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="flex items-center justify-between gap-3">
+            <div>
+              <h3 className="text-base font-semibold text-gray-900 dark:text-white">
+                Ảnh xác nhận chuyển khoản — {viewingProof.userName}
+              </h3>
+              <p className="mt-0.5 text-xs text-gray-500 dark:text-gray-400">
+                Số tiền: {formatCurrency(viewingProof.payment.amount)} · Kỳ {viewingProof.payment.paymentDate}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setViewingProof(null)}
+              className="rounded-lg p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-600 dark:hover:bg-white/10"
+            >
+              ✕
+            </button>
+          </div>
+          {viewingProof.payment.billImg && (
+            <img
+              src={getSettingAssetUrl(viewingProof.payment.billImg)}
+              alt={`Ảnh chuyển khoản của ${viewingProof.userName}`}
+              className="mx-auto mt-4 max-h-[65vh] rounded-lg object-contain"
+            />
+          )}
+          <div className="mt-5 flex items-center justify-end gap-3">
+            <button
+              type="button"
+              onClick={() => setViewingProof(null)}
+              className="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-700 dark:text-gray-300 dark:hover:bg-white/5"
+            >
+              Đóng
+            </button>
+            {viewingProof.payment.status !== "paid" && !viewingProof.payment.isPaid && (
+              <button
+                type="button"
+                disabled={confirmingPaymentId === viewingProof.payment.id}
+                onClick={() => { void handleMarkPaid(viewingProof.payment); }}
+                className="rounded-lg bg-brand-500 px-4 py-2 text-sm font-medium text-white hover:bg-brand-600 disabled:opacity-50"
+              >
+                {confirmingPaymentId === viewingProof.payment.id ? "Đang xác nhận..." : "Xác nhận đã thu"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
   </>;
 }
